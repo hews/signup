@@ -1,0 +1,67 @@
+{{define "title"}}Sign up · {{.Sheet.Title}}{{end}}
+{{define "content"}}
+{{$s := .Sheet}}
+<main class="page">
+  <header>
+    <p class="micro">{{$s.Title}}</p>
+    <h1>{{len .Picks}} slot{{if ne (len .Picks) 1}}s{{end}} selected</h1>
+  </header>
+
+  {{with .Errors.picks}}<p class="notice notice-error" role="alert">{{.}}</p>{{end}}
+  {{if .JustFilled}}{{if not .Errors.picks}}<p class="notice notice-key" role="alert">Something you chose filled up while you were typing. Nothing has been saved yet: check below and sign up again.</p>{{end}}{{end}}
+
+  {{if .Picks}}
+  <form class="stack" method="post" action="/s/{{$s.Slug}}/claim">
+    <div class="picks">
+      {{range .Picks}}
+      <div class="slot{{if .Full}} is-full{{end}}">
+        <input type="hidden" name="o" value="{{.OccurrenceID}}">
+        <div class="info">
+          <div class="name">{{.Title}}</div>
+          {{$d := .Date}}<div class="time">{{with $d}}{{fmtDay .}} {{fmtDate .}}{{end}}{{with fmtSlotTime .Start .End}}{{if $d}} · {{end}}{{.}}{{end}}</div>
+        </div>
+        {{if .Full}}
+        <label class="who waitlist"><input type="checkbox" name="waitlist_{{.OccurrenceID}}"{{if .Waitlist}} checked{{end}}>
+          <span><b>Just filled.</b> Join the waitlist instead: if a place opens, it is yours.</span></label>
+        {{end}}
+        <div class="who field">
+          <label class="sr-only" for="comment-{{.OccurrenceID}}">Comment for {{.Title}}</label>
+          <input class="input" id="comment-{{.OccurrenceID}}" name="comment_{{.OccurrenceID}}" maxlength="500" placeholder="Comment (optional)" value="{{.Comment}}">
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{with .Errors.comment}}<p class="error" role="alert">{{.}}</p>{{end}}
+
+    <div class="row2">
+      <div class="field{{if .Errors.first}} has-error{{end}}">
+        <label for="first">First name</label>
+        <input class="input" id="first" name="first" autocomplete="given-name" maxlength="120" required value="{{.Form.Get "first"}}">
+        {{template "field-error" .Errors.first}}
+      </div>
+      <div class="field{{if .Errors.last}} has-error{{end}}">
+        <label for="last">Last name</label>
+        <input class="input" id="last" name="last" autocomplete="family-name" maxlength="120" value="{{.Form.Get "last"}}">
+        {{template "field-error" .Errors.last}}
+      </div>
+    </div>
+    <div class="field{{if .Errors.phone}} has-error{{end}}">
+      <label for="phone">Mobile number</label>
+      <input class="input" id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="(216) 555-0142" value="{{.Form.Get "phone"}}">
+      {{template "field-error" .Errors.phone}}
+    </div>
+    {{if ne $s.CollectEmail "off"}}
+    <div class="field{{if .Errors.email}} has-error{{end}}">
+      <label for="email">Email {{if ne $s.CollectEmail "required"}}<span class="meta">(optional, or instead of a mobile number)</span>{{end}}</label>
+      <input class="input" id="email" name="email" type="email" autocomplete="email" value="{{.Form.Get "email"}}">
+      {{template "field-error" .Errors.email}}
+    </div>
+    {{end}}
+
+    <button class="btn btn-primary btn-block" type="submit">Sign up for {{len .Picks}} slot{{if ne (len .Picks) 1}}s{{end}}</button>
+    <p class="meta center">Others on this sheet see your first name and last initial. {{with $s.OrganizerName}}{{.}}{{else}}The organiser{{end}} sees your full details. Your number and email are never shown to anyone else.</p>
+  </form>
+  {{end}}
+  <a class="btn btn-ghost" href="/s/{{$s.Slug}}">Back to the sheet</a>
+</main>
+{{end}}

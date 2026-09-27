@@ -1,0 +1,32 @@
+{{define "title"}}My sign-ups · {{.Sheet.Title}}{{end}}
+{{define "content"}}
+<main class="page">
+  <header>
+    <p class="micro">{{.Sheet.Title}}</p>
+    <h1>{{if .New}}You're signed up, {{.First}}{{else}}Your sign-ups, {{.First}}{{end}}</h1>
+    {{with .Sheet.OrganizerName}}<p class="muted">{{.}}</p>{{end}}
+  </header>
+
+  {{if .Claims}}
+  <div class="picks">
+    {{range .Claims}}
+    <div class="slot">
+      <div class="info">
+        <div class="name">{{.SlotTitle}}</div>
+        {{$d := .Date}}<div class="time">{{with $d}}{{fmtDay .}} {{fmtDate .}}{{end}}{{with fmtSlotTime .Start .End}}{{if $d}} · {{end}}{{.}}{{end}}</div>
+        {{with .Comment}}<div class="meta">“{{.}}”</div>{{end}}
+      </div>
+      <div class="action">{{if eq .Status "waitlisted"}}<span class="chip chip-wait">Waitlist #{{.Position}}</span>{{else}}<span class="chip chip-ok">Confirmed</span>{{end}}</div>
+    </div>
+    {{end}}
+  </div>
+  {{else}}
+  <p class="muted">You have no sign-ups on this sheet any more.</p>
+  {{end}}
+
+  <div class="notice notice-key" role="note">
+    <b>Keep this page's address.</b> It is how you get back to your sign-ups. Bookmark it, or add it to your home screen.
+  </div>
+  <a class="btn btn-secondary btn-block" href="{{.SharePath}}">Back to the sheet</a>
+</main>
+{{end}}

@@ -71,6 +71,8 @@ type Sheet struct {
 	TimeZone      string
 	Format        string
 	Status        string
+	AllowWaitlist bool
+	CollectEmail  string // off | optional | required
 	Sections      []Section
 }
 
@@ -137,7 +139,7 @@ func Create(ctx context.Context, d *sql.DB, b Basics) (Sheet, string, error) {
 	}
 	return Sheet{ID: id, Slug: slug, Title: b.Title, Description: b.Description,
 		OrganizerName: b.OrganizerName, Location: b.Location, TimeZone: b.TimeZone,
-		Format: b.Format, Status: Draft}, token, nil
+		Format: b.Format, Status: Draft, AllowWaitlist: true, CollectEmail: "optional"}, token, nil
 }
 
 // ByAdminToken loads the sheet an admin token opens.
@@ -153,9 +155,9 @@ func BySlug(ctx context.Context, d *sql.DB, slug string) (Sheet, error) {
 func load(ctx context.Context, d *sql.DB, where string, arg any) (Sheet, error) {
 	var s Sheet
 	err := d.QueryRowContext(ctx, `SELECT id, slug, title, description, organizer_name, location,
-		time_zone, format, status FROM sheets WHERE `+where, arg).Scan(
+		time_zone, format, status, allow_waitlist, collect_email FROM sheets WHERE `+where, arg).Scan(
 		&s.ID, &s.Slug, &s.Title, &s.Description, &s.OrganizerName, &s.Location,
-		&s.TimeZone, &s.Format, &s.Status)
+		&s.TimeZone, &s.Format, &s.Status, &s.AllowWaitlist, &s.CollectEmail)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sheet{}, ErrNotFound
 	}

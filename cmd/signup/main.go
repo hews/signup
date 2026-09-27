@@ -18,7 +18,14 @@ import (
 	"github.com/hews/signup/internal/web"
 )
 
+// version is set at build time: -ldflags '-X main.version=v1.2.3'.
+var version = "dev"
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "-version" || os.Args[1] == "--version") {
+		fmt.Println(version)
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "signup:", err)
 		os.Exit(1)
@@ -56,7 +63,7 @@ func run() error {
 
 	errc := make(chan error, 1)
 	go func() {
-		logger.Info("listening", "addr", cfg.Listen)
+		logger.Info("listening", "addr", cfg.Listen, "version", version)
 		errc <- srv.ListenAndServe()
 	}()
 

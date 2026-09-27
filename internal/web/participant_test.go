@@ -91,14 +91,31 @@ func TestParticipantSeesWhatIsNeeded(t *testing.T) {
 }
 
 func TestParticipantCannotSeeDraftsOrUnknownSheets(t *testing.T) {
-	srv, _ := newServer(t)
+	srv, _, d := newServerDB(t)
 	admin := createSheet(t, srv.URL, "slots_only")
+	wantStatus(t, post(t, srv.URL+admin+"/sections", url.Values{"title": {"Bring"}}), http.StatusSeeOther)
 	_, page := get(t, srv.URL+admin)
-	m := regexp.MustCompile(`/s/[a-z0-9]+`).FindString(page)
-	if m != "" {
+	path, _ := firstSection(t, page)
+	wantStatus(t, post(t, srv.URL+path+"/slots", url.Values{"slot_title": {"Napkins"}}), http.StatusSeeOther)
+	_, page = get(t, srv.URL+admin)
+	if m := regexp.MustCompile(`/s/[a-z0-9]+`).FindString(page); m != "" {
 		t.Fatalf("draft manage page already shows a share path %q", m)
 	}
-	res, _ := get(t, srv.URL+"/s/doesnotexist0000")
+	// The draft has a slug already; its link must not work until it is published.
+	var slug string
+	if err := d.QueryRow(`SELECT slug FROM sheets`).Scan(&slug); err != nil {
+		t.Fatal(err)
+	}
+	res, page := get(t, srv.URL+"/s/"+slug)
+	wantStatus(t, res, http.StatusNotFound)
+	if strings.Contains(page, "Napkins") {
+		t.Fatal("draft content leaked on its participant link")
+	}
+	wantStatus(t, post(t, srv.URL+admin+"/publish", nil), http.StatusSeeOther)
+	res, _ = get(t, srv.URL+"/s/"+slug)
+	wantStatus(t, res, http.StatusOK)
+
+	res, _ = get(t, srv.URL+"/s/doesnotexist0000")
 	wantStatus(t, res, http.StatusNotFound)
 }
 

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.go) gofmt -w \"$f\" ;; esac",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bd prime --hook-json",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" \u0026\u0026 git diff --quiet -- '*.go' 'go.mod' 'go.sum' || { echo 'Go files changed: run make test before finishing.' \u003e\u00262; exit 2; }",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "model": "claude-opus-5-5",
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go run:*)",
+      "Bash(go mod tidy)",
+      "Bash(gofmt:*)",
+      "Bash(make:*)",
+      "Bash(bd:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Read(.env)",
+      "Read(**/*.age)"
+    ]
+  }
+}

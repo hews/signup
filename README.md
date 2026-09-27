@@ -36,6 +36,18 @@ Back up the database file continuously (Litestream works well) or copy it; there
 else to keep. Proxy configuration, service units and hosting details are deliberately not in
 this repository; they belong with whatever deploys it.
 
+## Releases
+
+Pushing a `v*` tag builds static Linux binaries (`amd64` and `arm64`) and publishes them as
+a GitHub release with a `SHA256SUMS` file and a build provenance attestation. To check a
+downloaded binary came from this repository's release workflow:
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
+gh attestation verify signup-v0.1.0-linux-amd64 --repo hews/signup
+chmod +x signup-v0.1.0-linux-amd64 && ./signup-v0.1.0-linux-amd64 -version
+```
+
 ## How this is built
 
 This project is an experiment in building software with an AI agent doing the work and one

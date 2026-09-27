@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := help
 
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
@@ -12,6 +14,6 @@ test: ## Format check, vet, tests
 	go test -race -count=1 ./...
 
 build: ## Static binary at ./signup
-	CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o signup ./cmd/signup
+	CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o signup ./cmd/signup
 
 .PHONY: help run test build

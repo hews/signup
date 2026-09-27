@@ -30,3 +30,33 @@ form.stack, .card.stack { gap: var(--s-4); }
 .builder details form { padding-top: var(--s-2); }
 .inline { display: inline; }
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s-3); }
+
+/* --- participant sheet (wireframe 1A) ---------------------------------------------------- */
+.sheet { max-width: var(--w-read); margin: 0 auto; padding-bottom: calc(var(--s-16) + var(--safe-b)); }
+.sheet .group-head { top: 0; margin: 0; }
+.sheet-note { margin: 0 var(--gutter) var(--s-4); }
+.fill progress { appearance: none; width: 100%; height: 6px; border: 0; border-radius: var(--r-pill); background: var(--c-surface-2); overflow: hidden; }
+.fill progress::-webkit-progress-bar { background: var(--c-surface-2); border-radius: var(--r-pill); }
+.fill progress::-webkit-progress-value { background: var(--c-accent); border-radius: var(--r-pill); }
+.fill progress::-moz-progress-bar { background: var(--c-accent); border-radius: var(--r-pill); }
+
+/* A slot's Sign up is a checkbox: tapping selects the row, and the bar below counts them. */
+.toggle { cursor: pointer; }
+.toggle .on { display: none; }
+.toggle:has(input:checked) { background: var(--c-accent); color: var(--c-accent-ink); border-color: var(--c-accent); }
+.toggle:has(input:checked) .on { display: inline; }
+.toggle:has(input:checked) .off { display: none; }
+.toggle:has(input:focus-visible) { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.slot:has(.toggle input:checked) { background: var(--c-accent-soft); }
+.slot:has(.toggle input:checked) .chip-need { background: var(--c-surface); }
+
+.picker { counter-reset: picked; }
+.picker input:checked { counter-increment: picked; }
+.selectbar {
+  position: sticky; bottom: 0; z-index: 20;
+  display: none; align-items: center; justify-content: space-between; gap: var(--s-3);
+  padding: var(--s-3) var(--gutter) calc(var(--s-3) + var(--safe-b));
+  background: var(--c-raised); border-top: 1px solid var(--c-line); box-shadow: var(--e-3);
+}
+.picker:has(input:checked) .selectbar { display: flex; }
+.selectbar .count::before { content: counter(picked) " selected"; font: var(--t-label); }

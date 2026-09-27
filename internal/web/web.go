@@ -4,13 +4,16 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -31,8 +34,10 @@ func Handler(d *sql.DB, logger *slog.Logger, baseURL string) http.Handler {
 		p.render(w, http.StatusOK, "home", nil)
 	})
 	static, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /static/", cacheFor(time.Hour, http.StripPrefix("/static/", http.FileServerFS(static))))
+	// Page links carry ?v=<fingerprint>, so the files can be cached for a long time.
+	mux.Handle("GET /static/", cacheFor(30*24*time.Hour, http.StripPrefix("/static/", http.FileServerFS(static))))
 	organiser{db: d, logger: logger, pages: p, baseURL: baseURL}.routes(mux)
+	participant{db: d, logger: logger, pages: p}.routes(mux)
 	// Refuse cross-site form posts: browsers mark them with Sec-Fetch-Site / Origin.
 	return requestLog(logger, secureHeaders(http.NewCrossOriginProtection().Handler(mux)))
 }
@@ -47,11 +52,30 @@ var templateFuncs = template.FuncMap{
 	"fmtDay":      func(d string) string { return fmtDate(d, "Mon") },
 	"fmtDate":     func(d string) string { return fmtDate(d, "Jan 2") },
 	"fmtSlotTime": fmtSlotTime,
+	"fmtWeekday":  func(d string) string { return fmtDate(d, "Monday") },
+	"asset":       func(name string) string { return "/static/" + name + "?v=" + assetVersion },
+	"join":        strings.Join,
+	"sub":         func(a, b int) int { return a - b },
 }
+
+// assetVersion fingerprints the embedded static files, so a new build's CSS gets a new URL
+// and no browser keeps an hour-old stylesheet across a deploy.
+var assetVersion = func() string {
+	h := sha256.New()
+	fs.WalkDir(staticFS, "static", func(path string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() {
+			b, _ := staticFS.ReadFile(path)
+			h.Write([]byte(path))
+			h.Write(b)
+		}
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}()
 
 func loadPages(logger *slog.Logger) pages {
 	p := pages{t: map[string]*template.Template{}, logger: logger}
-	for _, name := range []string{"home", "new", "manage", "confirm"} {
+	for _, name := range []string{"home", "new", "manage", "confirm", "sheet"} {
 		p.t[name] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
 			"templates/layout.html", "templates/"+name+".html"))
 	}

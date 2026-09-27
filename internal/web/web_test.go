@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,13 @@ import (
 
 func newServer(t *testing.T) (*httptest.Server, *bytes.Buffer) {
 	t.Helper()
+	srv, logs, _ := newServerDB(t)
+	return srv, logs
+}
+
+// newServerDB is newServer plus the database behind it, for tests that seed claims directly.
+func newServerDB(t *testing.T) (*httptest.Server, *bytes.Buffer, *sql.DB) {
+	t.Helper()
 	d, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +35,7 @@ func newServer(t *testing.T) (*httptest.Server, *bytes.Buffer) {
 	var logs bytes.Buffer
 	srv := httptest.NewServer(Handler(d, logx.New(&logs, slog.LevelDebug), ""))
 	t.Cleanup(srv.Close)
-	return srv, &logs
+	return srv, &logs, d
 }
 
 func TestHealthz(t *testing.T) {

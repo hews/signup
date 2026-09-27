@@ -1,0 +1,61 @@
+{{define "title"}}{{.Sheet.Title}}{{end}}
+{{define "content"}}
+{{$s := .Sheet}}
+<main class="sheet">
+  <header class="sheet-hero">
+    {{with $s.OrganizerName}}<div class="org">{{.}}</div>{{end}}
+    <h1>{{$s.Title}}</h1>
+    <div class="facts">
+      {{with .Dates}}<span>{{.}}</span>{{end}}
+      {{with $s.Location}}<span>{{.}}</span>{{end}}
+    </div>
+    {{with $s.Description}}<p class="desc">{{.}}</p>{{end}}
+    {{if gt .Wanted 0}}
+    <div class="fill">
+      <progress max="{{.Wanted}}" value="{{.Filled}}">{{.Filled}} of {{.Wanted}}</progress>
+      <div class="lbl"><span>{{.Filled}} of {{.Wanted}} filled</span><span>{{if lt .Filled .Wanted}}{{sub .Wanted .Filled}} more needed{{else}}All filled{{end}}</span></div>
+    </div>
+    {{end}}
+  </header>
+
+  {{if not .Open}}<p class="notice notice-key sheet-note" role="status">This sheet is closed. Nothing more can be signed up for.</p>{{end}}
+  {{if not .Sections}}<p class="sheet-note muted">Nothing left to sign up for: every date has passed.</p>{{end}}
+
+  <form method="get" action="/s/{{$s.Slug}}/claim" class="picker">
+    {{range .Sections}}
+    <section aria-label="{{if .Date}}{{fmtDay .Date}} {{fmtDate .Date}}{{else}}{{.Title}}{{end}}">
+      <h2 class="group-head">
+        {{if .Date}}<span class="day">{{fmtWeekday .Date}}</span><span class="date">{{fmtDate .Date}}</span>{{else}}<span class="day">{{.Title}}</span>{{end}}
+        {{if gt .Needed 0}}<span class="right">{{.Needed}} more needed</span>{{end}}
+      </h2>
+      {{range .Slots}}
+      <div class="slot{{if .Full}} is-full{{end}}">
+        <div class="info">
+          <div class="name">{{.Title}}</div>
+          {{with fmtSlotTime .Start .End}}<div class="time">{{.}}</div>{{end}}
+          {{with .Description}}<div class="meta">{{.}}</div>{{end}}
+        </div>
+        <div class="who">
+          {{if .Full}}<span class="chip chip-full">Full</span>{{else if gt .Needed 0}}<span class="chip chip-need">{{.Needed}} more needed</span>{{end}}
+          {{if .Taken.Names}}<span>{{join .Taken.Names ", "}}</span>{{else if not .Full}}<span>No one yet</span>{{end}}
+        </div>
+        {{if and $.Open (not .Full)}}
+        <label class="action btn btn-outline btn-sm toggle">
+          <input type="checkbox" name="o" value="{{.OccurrenceID}}" class="sr-only">
+          <span class="off">Sign up</span><span class="on" aria-hidden="true">Selected</span>
+          <span class="sr-only">{{.Title}}{{with fmtSlotTime .Start .End}}, {{.}}{{end}}</span>
+        </label>
+        {{end}}
+      </div>
+      {{end}}
+    </section>
+    {{end}}
+    {{if .Open}}
+    <div class="selectbar">
+      <span class="count"></span>
+      <button class="btn btn-primary" type="submit">Continue</button>
+    </div>
+    {{end}}
+  </form>
+</main>
+{{end}}

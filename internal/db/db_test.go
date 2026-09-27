@@ -175,6 +175,40 @@ func TestClaimsCannotCrossSheets(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "claim crosses sheets") {
 		t.Fatalf("update across sheets: err = %v, want the trigger to refuse it", err)
 	}
+
+	// Moving what a claim points at into the other sheet is refused too.
+	for _, q := range []string{
+		`INSERT INTO sections (id, sheet_id, position, title) VALUES (2, 2, 0, 'Things to bring')`,
+		`INSERT INTO slots (id, section_id, position, title) VALUES (2, 2, 0, 'Napkins')`,
+		`INSERT INTO occurrences (id, slot_id) VALUES (2, 2)`,
+	} {
+		if _, err := d.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range []struct{ q, want string }{
+		{`UPDATE people SET sheet_id = 2 WHERE id = 1`, "people.sheet_id cannot change"},
+		{`UPDATE sections SET sheet_id = 2 WHERE id = 1`, "sections.sheet_id cannot change"},
+		{`UPDATE slots SET section_id = 2 WHERE id = 1`, "slots.section_id cannot change"},
+		{`UPDATE occurrences SET slot_id = 2 WHERE id = 1`, "occurrences.slot_id cannot change"},
+	} {
+		if _, err := d.Exec(c.q); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", c.q, err, c.want)
+		}
+	}
+
+	// Within one sheet a claim can still move, and unrelated columns still update.
+	for _, q := range []string{
+		`INSERT INTO slots (id, section_id, position, title) VALUES (3, 1, 1, 'Snacks')`,
+		`INSERT INTO occurrences (id, slot_id, date) VALUES (3, 3, '2026-10-30')`,
+		`UPDATE claims SET occurrence_id = 3 WHERE id = 1`,
+		`UPDATE people SET first_name = 'Jen' WHERE id = 1`,
+		`UPDATE sections SET position = 7 WHERE id = 1`,
+	} {
+		if _, err := d.Exec(q); err != nil {
+			t.Errorf("%s: %v", q, err)
+		}
+	}
 }
 
 func TestSheetsSchemaAcceptsEdgeValues(t *testing.T) {

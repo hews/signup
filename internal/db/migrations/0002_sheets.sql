@@ -18,8 +18,8 @@
 -- Instants must be exactly YYYY-MM-DDTHH:MM:SS.SSSZ, because expiry is compared as text.
 --
 -- Deleting a sheet deletes everything under it, including the people who signed up to it:
--- in M1 a person belongs to exactly one sheet, so nothing personal outlives the sheet, and a
--- trigger keeps every claim inside one sheet.
+-- in M1 a person belongs to exactly one sheet, so nothing personal outlives the sheet, and
+-- triggers keep every claim inside one sheet, from the claim's side and from its parents'.
 --
 -- Left to the application (checked in Go, not here): the time zone is a valid IANA name; a
 -- by_date section has a date and a slots_only section does not; an occurrence's date matches
@@ -100,7 +100,7 @@ CREATE TABLE claims (
     status            TEXT    NOT NULL CHECK (status IN ('confirmed', 'waitlisted', 'cancelled')),
     created_by        TEXT    NOT NULL DEFAULT 'participant' CHECK (created_by IN ('participant', 'organizer')),
     manage_token_hash BLOB    NOT NULL UNIQUE CHECK (length(manage_token_hash) = 32),
-    manage_expires_at TEXT    NOT NULL CHECK (manage_expires_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', manage_expires_at) IS manage_expires_at),
+    manage_expires_at TEXT    NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', manage_expires_at) IS manage_expires_at),
     created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     cancelled_at      TEXT    CHECK (cancelled_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', cancelled_at) IS cancelled_at),
@@ -136,6 +136,33 @@ WHEN (SELECT sheet_id FROM people WHERE id = NEW.person_id) <>
        WHERE o.id = NEW.occurrence_id)
 BEGIN
     SELECT RAISE(ABORT, 'claim crosses sheets');
+END;
+
+-- The same rule from the other side: a row never moves to another parent, so nothing a claim
+-- points at can be carried into a different sheet. (A claim itself may move to another
+-- occurrence on its own sheet; the triggers above check that.) Nothing in M1 re-parents rows.
+CREATE TRIGGER people_sheet_id_fixed BEFORE UPDATE OF sheet_id ON people
+WHEN NEW.sheet_id IS NOT OLD.sheet_id
+BEGIN
+    SELECT RAISE(ABORT, 'people.sheet_id cannot change');
+END;
+
+CREATE TRIGGER sections_sheet_id_fixed BEFORE UPDATE OF sheet_id ON sections
+WHEN NEW.sheet_id IS NOT OLD.sheet_id
+BEGIN
+    SELECT RAISE(ABORT, 'sections.sheet_id cannot change');
+END;
+
+CREATE TRIGGER slots_section_id_fixed BEFORE UPDATE OF section_id ON slots
+WHEN NEW.section_id IS NOT OLD.section_id
+BEGIN
+    SELECT RAISE(ABORT, 'slots.section_id cannot change');
+END;
+
+CREATE TRIGGER occurrences_slot_id_fixed BEFORE UPDATE OF slot_id ON occurrences
+WHEN NEW.slot_id IS NOT OLD.slot_id
+BEGIN
+    SELECT RAISE(ABORT, 'occurrences.slot_id cannot change');
 END;
 
 UPDATE meta SET value = '2' WHERE key = 'schema';

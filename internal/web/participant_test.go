@@ -157,3 +157,136 @@ func TestBuildSheetPageHidesPastDatesAndCounts(t *testing.T) {
 		t.Fatalf("section needed %d, dates %q", pg.Sections[0].Needed, pg.Dates)
 	}
 }
+
+// occurrences returns the sign-up toggle values on a sheet page, in page order.
+func occurrences(t *testing.T, page string) []string {
+	t.Helper()
+	var out []string
+	for _, m := range regexp.MustCompile(`name="o" value="(\d+)"`).FindAllStringSubmatch(page, -1) {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+func TestParticipantSignsUp(t *testing.T) {
+	srv, logs := newServer(t)
+	_, share := publishedSheet(t, srv.URL, "2099-10-30", "Crafts table", "3", "Clean up", "2")
+	_, page := get(t, srv.URL+share)
+	occ := occurrences(t, page)
+
+	res, form := get(t, srv.URL+share+"/claim?o="+occ[0]+"&o="+occ[1])
+	wantStatus(t, res, http.StatusOK)
+	for _, want := range []string{"2 slots selected", "Crafts table", "Clean up", `name="phone"`, "never shown to anyone else"} {
+		if !strings.Contains(form, want) {
+			t.Errorf("claim form missing %q", want)
+		}
+	}
+
+	res = post(t, srv.URL+share+"/claim", url.Values{"o": {occ[0], occ[1]}, "comment_" + occ[0]: {"bringing glue"},
+		"first": {"Jenny"}, "last": {"Rivera"}, "phone": {"(216) 555-0142"}})
+	wantStatus(t, res, http.StatusSeeOther)
+	mine := res.Header.Get("Location")
+	if !strings.HasPrefix(mine, "/m/") || !strings.HasSuffix(mine, "?new=1") {
+		t.Fatalf("redirect = %q, want the manage link", mine)
+	}
+	res, page = get(t, srv.URL+mine)
+	wantStatus(t, res, http.StatusOK)
+	for _, want := range []string{"You're signed up, Jenny", "Crafts table", "Clean up", "“bringing glue”", "Confirmed", "Keep this page's address"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("confirmation missing %q", want)
+		}
+	}
+	_, page = get(t, srv.URL+share)
+	if !strings.Contains(page, "Jenny R.") || strings.Contains(page, "Rivera") {
+		t.Error("sheet page should show Jenny R. and no surname")
+	}
+
+	token := strings.TrimSuffix(strings.TrimPrefix(mine, "/m/"), "?new=1")
+	for _, leak := range []string{"Jenny", "Rivera", "2165550142", "555-0142", "glue", token} {
+		if strings.Contains(logs.String(), leak) {
+			t.Errorf("logs carry %q", leak)
+		}
+	}
+	res, _ = get(t, srv.URL+"/m/"+token+"x")
+	wantStatus(t, res, http.StatusNotFound)
+}
+
+func TestSlotThatJustFilledOffersTheWaitlist(t *testing.T) {
+	srv, _ := newServer(t)
+	_, share := publishedSheet(t, srv.URL, "2099-10-30", "Crafts table", "1", "Clean up", "2")
+	_, page := get(t, srv.URL+share)
+	occ := occurrences(t, page)
+	// Sam takes the only Crafts place while Jenny has the form open.
+	wantStatus(t, post(t, srv.URL+share+"/claim", url.Values{"o": {occ[0]}, "first": {"Sam"}, "phone": {"2165550199"}}), http.StatusSeeOther)
+
+	jenny := url.Values{"o": {occ[0], occ[1]}, "first": {"Jenny"}, "phone": {"2165550142"}}
+	res := post(t, srv.URL+share+"/claim", jenny)
+	wantStatus(t, res, http.StatusConflict)
+	page = body(t, res)
+	for _, want := range []string{"Just filled.", `name="waitlist_` + occ[0] + `" checked`, `value="Jenny"`, "Nothing has been saved yet"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("just-filled form missing %q", want)
+		}
+	}
+	jenny.Set("waitlist_"+occ[0], "on")
+	res = post(t, srv.URL+share+"/claim", jenny)
+	wantStatus(t, res, http.StatusSeeOther)
+	_, page = get(t, srv.URL+res.Header.Get("Location"))
+	if !strings.Contains(page, "Waitlist #1") || !strings.Contains(page, "Confirmed") {
+		t.Fatal("confirmation should show the waitlist place and the confirmed slot")
+	}
+}
+
+func TestFullSlotWithoutAWaitlistIsTakenOut(t *testing.T) {
+	srv, _, d := newServerDB(t)
+	_, share := publishedSheet(t, srv.URL, "2099-10-30", "Crafts table", "1", "Clean up", "2")
+	if _, err := d.Exec(`UPDATE sheets SET allow_waitlist = 0`); err != nil {
+		t.Fatal(err)
+	}
+	_, page := get(t, srv.URL+share)
+	occ := occurrences(t, page)
+	wantStatus(t, post(t, srv.URL+share+"/claim", url.Values{"o": {occ[0]}, "first": {"Sam"}, "phone": {"2165550199"}}), http.StatusSeeOther)
+	res := post(t, srv.URL+share+"/claim", url.Values{"o": {occ[0], occ[1]}, "first": {"Jenny"}, "phone": {"2165550142"}})
+	wantStatus(t, res, http.StatusConflict)
+	page = body(t, res)
+	if !strings.Contains(page, "has been taken out") || strings.Contains(page, `value="`+occ[0]+`"`) || !strings.Contains(page, `value="`+occ[1]+`"`) {
+		t.Fatal("the full slot should leave the form and the other stay")
+	}
+}
+
+func TestClaimFormKeepsWhatWasTyped(t *testing.T) {
+	srv, _ := newServer(t)
+	_, share := publishedSheet(t, srv.URL, "2099-10-30", "Crafts table", "3")
+	_, page := get(t, srv.URL+share)
+	occ := occurrences(t, page)
+	res := post(t, srv.URL+share+"/claim", url.Values{"o": {occ[0]}, "first": {"Jenny"}, "phone": {"555-0142"}, "comment_" + occ[0]: {"glue"}})
+	wantStatus(t, res, http.StatusUnprocessableEntity)
+	page = body(t, res)
+	for _, want := range []string{"Enter a mobile number like", `value="Jenny"`, `value="glue"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("form lost %q", want)
+		}
+	}
+}
+
+func TestClaimIgnoresSlotsFromOtherSheets(t *testing.T) {
+	srv, _ := newServer(t)
+	_, share := publishedSheet(t, srv.URL, "2099-10-30", "Crafts table", "3")
+	_, other := publishedSheet(t, srv.URL, "2099-10-30", "Theirs", "3")
+	_, page := get(t, srv.URL+other)
+	theirs := occurrences(t, page)[0]
+
+	res, _ := get(t, srv.URL+share+"/claim?o="+theirs)
+	wantStatus(t, res, http.StatusSeeOther)
+	res = post(t, srv.URL+share+"/claim", url.Values{"o": {theirs}, "first": {"Jenny"}, "phone": {"2165550142"}})
+	wantStatus(t, res, http.StatusSeeOther)
+	if loc := res.Header.Get("Location"); loc != share {
+		t.Fatalf("redirect = %q, want back to the sheet", loc)
+	}
+	_, page = get(t, srv.URL+other)
+	if strings.Contains(page, "Jenny") {
+		t.Fatal("a claim landed on the other sheet")
+	}
+	res, _ = get(t, srv.URL+share+"/claim")
+	wantStatus(t, res, http.StatusSeeOther)
+}

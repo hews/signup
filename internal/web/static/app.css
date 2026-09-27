@@ -60,3 +60,11 @@ form.stack, .card.stack { gap: var(--s-4); }
 }
 .picker:has(input:checked) .selectbar { display: flex; }
 .selectbar .count::before { content: counter(picked) " selected"; font: var(--t-label); }
+
+/* --- claim form (wireframe 1B) and my sign-ups (1D) ------------------------------------- */
+.picks { border: 1px solid var(--c-line); border-radius: var(--r-lg); overflow: hidden; }
+.picks .slot:first-of-type { border-top: 0; }
+.picks .slot:last-of-type { border-bottom: 0; }
+.picks .who.field { grid-column: 1 / -1; grid-row: auto; }
+.picks .waitlist { grid-column: 1 / -1; grid-row: auto; display: flex; gap: var(--s-2); align-items: flex-start; padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--c-wait-soft); color: var(--c-ink); cursor: pointer; }
+.picks .waitlist input { margin-top: 3px; }

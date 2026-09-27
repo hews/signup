@@ -107,8 +107,7 @@ CREATE TABLE claims (
     CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL))
 );
 
-CREATE INDEX sections_by_sheet ON sections (sheet_id, position);
-CREATE INDEX slots_by_section ON slots (section_id, position);
+-- sections and slots are already indexed by their UNIQUE (parent, position) constraints.
 CREATE INDEX occurrences_by_slot ON occurrences (slot_id);
 -- Capacity is summed over live claims per occurrence on every claim.
 CREATE INDEX claims_by_occurrence ON claims (occurrence_id, status);

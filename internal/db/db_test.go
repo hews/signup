@@ -139,6 +139,21 @@ func TestSheetsSchemaRejectsBadRows(t *testing.T) {
 			VALUES (1, 1, 'cancelled', ?, '2026-11-29T00:00:00.000Z', '2026-10-01T09:00:00+00:00')`, []any{hash32(9)}, check},
 		{"empty time zone", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format)
 			VALUES ('zzzzzzzzzz', ?, 'T', '', 'slots_only')`, []any{hash32(9)}, check},
+		{"confirmed with cancelled_at", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at, cancelled_at)
+			VALUES (1, 1, 'confirmed', ?, '2026-11-29T00:00:00.000Z', '2026-10-01T09:00:00.000Z')`, []any{hash32(9)}, check},
+		{"unknown claim status", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
+			VALUES (1, 1, 'maybe', ?, '2026-11-29T00:00:00.000Z')`, []any{hash32(9)}, check},
+		{"zero claim quantity", `INSERT INTO claims (occurrence_id, person_id, quantity, status, manage_token_hash, manage_expires_at)
+			VALUES (1, 1, 0, 'confirmed', ?, '2026-11-29T00:00:00.000Z')`, []any{hash32(9)}, check},
+		{"unknown sheet status", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format, status)
+			VALUES ('zzzzzzzzzz', ?, 'T', 'UTC', 'slots_only', 'archived')`, []any{hash32(9)}, check},
+		{"published_at not in the stored format", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format, published_at)
+			VALUES ('zzzzzzzzzz', ?, 'T', 'UTC', 'slots_only', '2026-10-01')`, []any{hash32(9)}, check},
+		{"unknown unit", `INSERT INTO slots (section_id, position, title, unit) VALUES (1, 5, 'X', 'boxes')`, nil, check},
+		{"zero max per claim", `INSERT INTO slots (section_id, position, title, max_per_claim) VALUES (1, 5, 'X', 0)`, nil, check},
+		{"phone starting +0", `INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Sam', '+02165550142')`, nil, check},
+		{"phone too short", `INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Sam', '+12345')`, nil, check},
+		{"malformed email", `INSERT INTO people (sheet_id, first_name, email) VALUES (1, 'Sam', 'sam.example.org')`, nil, check},
 		{"claim for missing occurrence", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
 			VALUES (99, 1, 'confirmed', ?, '2026-11-29T00:00:00.000Z')`, []any{hash32(9)}, fk},
 	}

@@ -199,17 +199,35 @@ func TestRemovingADateAsksFirst(t *testing.T) {
 func TestAdminLinksAreTheOnlyWayIn(t *testing.T) {
 	srv, _ := newServer(t)
 	admin := createSheet(t, srv.URL, "slots_only")
-	res, _ := get(t, srv.URL+admin+"x")
-	wantStatus(t, res, http.StatusNotFound)
+	res0, _ := get(t, srv.URL+admin+"x")
+	wantStatus(t, res0, http.StatusNotFound)
 	wantStatus(t, post(t, srv.URL+"/o/not-a-token/sections", url.Values{"title": {"Bring"}}), http.StatusNotFound)
 
 	// Another sheet's section id, posted through this sheet's admin link, is refused.
 	other := createSheet(t, srv.URL, "slots_only")
 	wantStatus(t, post(t, srv.URL+other+"/sections", url.Values{"title": {"Theirs"}}), http.StatusSeeOther)
-	_, page := get(t, srv.URL+other)
+	res, page := get(t, srv.URL+other)
+	wantStatus(t, res, http.StatusOK)
 	_, id := firstSection(t, page)
 	wantStatus(t, post(t, srv.URL+admin+"/sections/"+id+"/slots", url.Values{"slot_title": {"Intruder"}}), http.StatusNotFound)
 	wantStatus(t, post(t, srv.URL+admin+"/sections/"+id+"/remove", nil), http.StatusNotFound)
+	res, page = get(t, srv.URL+admin+"/sections/"+id+"/remove")
+	wantStatus(t, res, http.StatusNotFound)
+	if strings.Contains(page, "Theirs") {
+		t.Fatal("confirm page showed another sheet's section")
+	}
+
+	path, _ := firstSection(t, func() string { _, p := get(t, srv.URL+other); return p }())
+	wantStatus(t, post(t, srv.URL+path+"/slots", url.Values{"slot_title": {"Their slot"}}), http.StatusSeeOther)
+	_, page = get(t, srv.URL+other)
+	m := regexp.MustCompile(`/slots/(\d+)/remove`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("no slot remove form on the other sheet")
+	}
+	wantStatus(t, post(t, srv.URL+admin+"/slots/"+m[1]+"/remove", nil), http.StatusNotFound)
+	if _, page = get(t, srv.URL+other); !strings.Contains(page, "Their slot") {
+		t.Fatal("another sheet's slot was removed")
+	}
 }
 
 func TestCrossSitePostsAreRefused(t *testing.T) {

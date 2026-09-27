@@ -264,6 +264,18 @@ func TestPublishNeedsASlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	s = reload(t, d, token)
+	// A copy loaded while the slot existed must not publish once the slot is gone.
+	stale := s
+	if err := RemoveSlot(ctx, d, s, s.Sections[0].Slots[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := Publish(ctx, d, stale); !errors.As(err, &bad) {
+		t.Fatalf("publishing with a stale copy after the last slot went: err = %v, want Invalid", err)
+	}
+	if err := AddSlot(ctx, d, s, s.Sections[0].ID, SlotInput{Title: "Napkins"}); err != nil {
+		t.Fatal(err)
+	}
+	s = reload(t, d, token)
 	if err := Publish(ctx, d, s); err != nil {
 		t.Fatal(err)
 	}

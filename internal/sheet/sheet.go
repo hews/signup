@@ -362,14 +362,22 @@ func Publish(ctx context.Context, d *sql.DB, s Sheet) error {
 	case Closed:
 		return Invalid{"publish": "This sheet is closed."}
 	}
-	if s.Slots() == 0 {
-		return Invalid{"publish": "Add at least one slot first."}
-	}
-	_, err := d.ExecContext(ctx, `UPDATE sheets SET status = 'open',
+	// The slot check is in the statement, not only in s: a slot removed a moment ago in
+	// another tab must not let an empty sheet go live.
+	res, err := d.ExecContext(ctx, `UPDATE sheets SET status = 'open',
 		published_at = coalesce(published_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
 		updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		WHERE id = ? AND status = 'draft'`, s.ID)
-	return err
+		WHERE id = ? AND status = 'draft'
+		AND EXISTS (SELECT 1 FROM slots sl JOIN sections se ON se.id = sl.section_id WHERE se.sheet_id = sheets.id)`, s.ID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return Invalid{"publish": "Add at least one slot first."}
+	}
+	return nil
 }
 
 func (s Sheet) section(id int64) (Section, bool) {

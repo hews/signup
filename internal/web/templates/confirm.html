@@ -1,0 +1,15 @@
+{{define "title"}}Remove? · {{.Sheet.Title}} · signup{{end}}
+{{define "content"}}
+{{$sec := .Section}}
+<main class="page">
+  <header>
+    <p class="micro">{{.Sheet.Title}}</p>
+    <h1>Remove {{if $sec.Date}}{{fmtDay $sec.Date}} {{fmtDate $sec.Date}}{{else}}“{{$sec.Title}}”{{end}}?</h1>
+    <p class="muted">{{with len $sec.Slots}}Its {{.}} slot{{if ne . 1}}s go{{else}} goes{{end}} with it: {{range $i, $s := $sec.Slots}}{{if $i}}, {{end}}{{$s.Title}}{{end}}.{{else}}It has no slots yet.{{end}} This cannot be undone.</p>
+  </header>
+  <form class="stack" method="post" action="{{.AdminPath}}/sections/{{$sec.ID}}/remove">
+    <button class="btn btn-danger btn-block" type="submit">Remove</button>
+    <a class="btn btn-outline btn-block" href="{{.AdminPath}}">Keep it</a>
+  </form>
+</main>
+{{end}}

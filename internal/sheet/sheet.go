@@ -251,7 +251,7 @@ func AddSlot(ctx context.Context, d *sql.DB, s Sheet, sectionID int64, in SlotIn
 		bad["slot_description"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxDescription)
 	}
 	if in.Quantity < 0 || in.Quantity > maxQuantity {
-		bad["quantity"] = fmt.Sprintf("Between 1 and %d, or leave blank for no limit.", maxQuantity)
+		bad["quantity"] = fmt.Sprintf("Between 1 and %d, or leave it blank for no limit.", maxQuantity)
 	}
 	if in.Start != "" && !validTime(in.Start) {
 		bad["start"] = "Use a time like 13:00."
@@ -293,9 +293,8 @@ func RemoveSlot(ctx context.Context, d *sql.DB, s Sheet, slotID int64) error {
 	if !s.hasSlot(slotID) {
 		return ErrNotFound
 	}
-	return removeUnclaimed(ctx, d, s.ID, `DELETE FROM slots WHERE id = ?`, slotID,
-		`SELECT count(*) FROM claims c JOIN occurrences o ON o.id = c.occurrence_id
-		 WHERE o.slot_id = ? AND c.status <> 'cancelled'`)
+	return removeUnclaimed(ctx, d, `DELETE FROM slots WHERE id = ?`, slotID,
+		`FROM claims c JOIN occurrences o ON o.id = c.occurrence_id WHERE o.slot_id = ?`)
 }
 
 // RemoveSection deletes a date or heading of this sheet and its slots, refusing while anyone
@@ -304,31 +303,52 @@ func RemoveSection(ctx context.Context, d *sql.DB, s Sheet, sectionID int64) err
 	if _, ok := s.section(sectionID); !ok {
 		return ErrNotFound
 	}
-	return removeUnclaimed(ctx, d, s.ID, `DELETE FROM sections WHERE id = ?`, sectionID,
-		`SELECT count(*) FROM claims c JOIN occurrences o ON o.id = c.occurrence_id
-		 JOIN slots sl ON sl.id = o.slot_id WHERE sl.section_id = ? AND c.status <> 'cancelled'`)
+	return removeUnclaimed(ctx, d, `DELETE FROM sections WHERE id = ?`, sectionID,
+		`FROM claims c JOIN occurrences o ON o.id = c.occurrence_id
+		 JOIN slots sl ON sl.id = o.slot_id WHERE sl.section_id = ?`)
 }
 
-func removeUnclaimed(ctx context.Context, d *sql.DB, sheetID int64, del string, id int64, count string) error {
+// removeUnclaimed runs del unless a live claim sits under it. claimsUnder is a FROM … WHERE
+// clause selecting the claims del would cascade away, with id as its one parameter. Anyone
+// whose only claims went with it is deleted too, so no details stay without a claim.
+func removeUnclaimed(ctx context.Context, d *sql.DB, del string, id int64, claimsUnder string) error {
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var n int
-	if err := tx.QueryRowContext(ctx, count, id).Scan(&n); err != nil {
+	var live int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) `+claimsUnder+` AND c.status <> 'cancelled'`, id).Scan(&live); err != nil {
 		return err
 	}
-	if n > 0 {
+	if live > 0 {
 		return ErrHasClaims
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT c.person_id `+claimsUnder, id)
+	if err != nil {
+		return err
+	}
+	var affected []int64
+	for rows.Next() {
+		var p int64
+		if err := rows.Scan(&p); err != nil {
+			rows.Close()
+			return err
+		}
+		affected = append(affected, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, del, id); err != nil {
 		return err
 	}
-	// The cascade took any cancelled claims with it; nobody's details stay without a claim.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM people WHERE sheet_id = ?
-		AND NOT EXISTS (SELECT 1 FROM claims WHERE claims.person_id = people.id)`, sheetID); err != nil {
-		return err
+	for _, p := range affected {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM people WHERE id = ?
+			AND NOT EXISTS (SELECT 1 FROM claims WHERE claims.person_id = people.id)`, p); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

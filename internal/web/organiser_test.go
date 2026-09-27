@@ -164,6 +164,36 @@ func TestOrganiserSeesProblemsInPlace(t *testing.T) {
 	}
 	res = post(t, srv.URL+admin+"/sections", url.Values{"date": {"not a date"}})
 	wantStatus(t, res, http.StatusUnprocessableEntity)
+
+	wantStatus(t, post(t, srv.URL+admin+"/sections", url.Values{"date": {"2026-10-30"}}), http.StatusSeeOther)
+	_, page := get(t, srv.URL+admin)
+	path, _ := firstSection(t, page)
+	res = post(t, srv.URL+path+"/slots", url.Values{"slot_title": {"Crafts"}, "quantity": {"0"}})
+	wantStatus(t, res, http.StatusUnprocessableEntity)
+	if page := body(t, res); !strings.Contains(page, "leave it blank for no limit") {
+		t.Fatal("a typed 0 was not pointed out")
+	}
+}
+
+func TestRemovingADateAsksFirst(t *testing.T) {
+	srv, _ := newServer(t)
+	admin := createSheet(t, srv.URL, "by_date")
+	wantStatus(t, post(t, srv.URL+admin+"/sections", url.Values{"date": {"2026-10-30"}}), http.StatusSeeOther)
+	_, page := get(t, srv.URL+admin)
+	path, _ := firstSection(t, page)
+	wantStatus(t, post(t, srv.URL+path+"/slots", url.Values{"slot_title": {"Crafts table"}}), http.StatusSeeOther)
+
+	res, page := get(t, srv.URL+path+"/remove")
+	wantStatus(t, res, http.StatusOK)
+	for _, want := range []string{"Remove Fri Oct 30?", "Its 1 slot goes with it: Crafts table.", "Keep it"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("confirm page missing %q", want)
+		}
+	}
+	wantStatus(t, post(t, srv.URL+path+"/remove", nil), http.StatusSeeOther)
+	if _, page = get(t, srv.URL+admin); strings.Contains(page, "Crafts table") {
+		t.Fatal("date still there after confirming")
+	}
 }
 
 func TestAdminLinksAreTheOnlyWayIn(t *testing.T) {

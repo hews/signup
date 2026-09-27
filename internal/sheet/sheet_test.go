@@ -228,6 +228,10 @@ func TestRemoveRefusesWhileClaimed(t *testing.T) {
 	if _, err := d.Exec(`UPDATE claims SET status = 'cancelled', cancelled_at = '2026-10-01T09:00:00.000Z'`); err != nil {
 		t.Fatal(err)
 	}
+	// Someone on the sheet with no claim yet (as mid-way through adding them) is left alone.
+	if _, err := d.Exec(`INSERT INTO people (id, sheet_id, first_name, phone) VALUES (2, ?, 'Sam', '+12165550199')`, s.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := RemoveSlot(ctx, d, s, slot.ID); err != nil {
 		t.Errorf("RemoveSlot after cancellation: %v", err)
 	}
@@ -235,8 +239,12 @@ func TestRemoveRefusesWhileClaimed(t *testing.T) {
 	if err := d.QueryRow(`SELECT count(*) FROM people WHERE sheet_id = ?`, s.ID).Scan(&people); err != nil {
 		t.Fatal(err)
 	}
-	if people != 0 {
-		t.Errorf("%d people left with no claim after removing the slot, want 0", people)
+	if people != 1 {
+		t.Errorf("%d people on the sheet after removing the slot, want 1 (Jenny gone, Sam kept)", people)
+	}
+	var name string
+	if err := d.QueryRow(`SELECT first_name FROM people WHERE sheet_id = ?`, s.ID).Scan(&name); err != nil || name != "Sam" {
+		t.Errorf("remaining person = %q, %v; want Sam", name, err)
 	}
 }
 

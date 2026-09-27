@@ -32,9 +32,7 @@
     <section aria-label="{{if .Date}}{{fmtDate .Date}}{{else}}{{.Title}}{{end}}">
       <div class="group-head">
         {{if .Date}}<span class="day">{{fmtDay .Date}}</span><span class="date">{{fmtDate .Date}}</span>{{else}}<span class="day">{{.Title}}</span>{{end}}
-        <form class="inline right" method="post" action="{{$base}}/sections/{{.ID}}/remove">
-          <button class="btn btn-ghost btn-sm" type="submit">Remove</button>
-        </form>
+        <a class="btn btn-ghost btn-sm right" href="{{$base}}/sections/{{.ID}}/remove">Remove…</a>
       </div>
       {{range .Slots}}
       <div class="slot">

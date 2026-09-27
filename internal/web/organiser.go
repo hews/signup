@@ -45,6 +45,7 @@ func (o organiser) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /o/{token}", o.manage)
 	mux.HandleFunc("POST /o/{token}/sections", o.addSection)
 	mux.HandleFunc("POST /o/{token}/sections/{id}/slots", o.addSlot)
+	mux.HandleFunc("GET /o/{token}/sections/{id}/remove", o.confirmRemoveSection)
 	mux.HandleFunc("POST /o/{token}/sections/{id}/remove", o.removeSection)
 	mux.HandleFunc("POST /o/{token}/slots/{id}/remove", o.removeSlot)
 	mux.HandleFunc("POST /o/{token}/publish", o.publish)
@@ -107,8 +108,8 @@ func (o organiser) addSlot(w http.ResponseWriter, r *http.Request) {
 	qty := 0
 	if v := strings.TrimSpace(r.PostForm.Get("quantity")); v != "" {
 		n, err := strconv.Atoi(v)
-		if err != nil {
-			n = -1
+		if err != nil || n == 0 {
+			n = -1 // blank means no limit; a typed 0 is a mistake to point out
 		}
 		qty = n
 	}
@@ -120,6 +121,29 @@ func (o organiser) addSlot(w http.ResponseWriter, r *http.Request) {
 		End:         r.PostForm.Get("end"),
 	})
 	o.after(w, r, s, err, id)
+}
+
+// confirmRemoveSection asks before a date or heading goes, naming what goes with it.
+func (o organiser) confirmRemoveSection(w http.ResponseWriter, r *http.Request) {
+	s, ok := o.sheet(w, r)
+	if !ok {
+		return
+	}
+	for _, sec := range s.Sections {
+		if sec.ID == pathID(r) {
+			w.Header().Set("Cache-Control", "no-store")
+			o.pages.render(w, http.StatusOK, "confirm", confirmPage{
+				Sheet: s, Section: sec, AdminPath: adminPath(r.PathValue("token"))})
+			return
+		}
+	}
+	o.notFound(w)
+}
+
+type confirmPage struct {
+	Sheet     sheet.Sheet
+	Section   sheet.Section
+	AdminPath string
 }
 
 func (o organiser) removeSection(w http.ResponseWriter, r *http.Request) {

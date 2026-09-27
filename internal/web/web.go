@@ -51,7 +51,7 @@ var templateFuncs = template.FuncMap{
 
 func loadPages(logger *slog.Logger) pages {
 	p := pages{t: map[string]*template.Template{}, logger: logger}
-	for _, name := range []string{"home", "new", "manage"} {
+	for _, name := range []string{"home", "new", "manage", "confirm"} {
 		p.t[name] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
 			"templates/layout.html", "templates/"+name+".html"))
 	}

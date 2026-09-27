@@ -1,0 +1,11 @@
+/signup
+*.db
+*.db-wal
+*.db-shm
+.env
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*

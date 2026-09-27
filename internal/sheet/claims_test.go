@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -208,5 +210,63 @@ func TestEmailOnlyAndExpiry(t *testing.T) {
 	}
 	if _, err := ByManageToken(ctx, d, token); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired token: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestEmailRules(t *testing.T) {
+	var bad Invalid
+	if _, err := (Person{First: "Jen", Phone: "2165550142", Email: "not an email"}).normalised("off"); err != nil {
+		t.Errorf("email ignored when the sheet collects none: %v", err)
+	}
+	if _, err := (Person{First: "Jen"}).normalised("required"); !errors.As(err, &bad) || bad["email"] == "" || bad["phone"] != "" {
+		t.Errorf("required email with no contact: %v, want the email message", err)
+	}
+}
+
+// TestLastPlaceGoesToExactlyOne races many people for a slot's last places through the real
+// database (db.Open's DSN), all at once. Capacity is atomic: exactly the places available
+// are confirmed, and everyone else is told the slot filled. Nothing else may fail.
+func TestLastPlaceGoesToExactlyOne(t *testing.T) {
+	for _, places := range []int{1, 3} {
+		t.Run(fmt.Sprintf("%d places", places), func(t *testing.T) {
+			d := testDB(t)
+			s, _ := openSheet(t, d, "2099-10-30", places)
+			const racers = 20
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			errs := make([]error, racers)
+			for i := range racers {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-start
+					p := Person{First: fmt.Sprintf("Racer%d", i), Phone: fmt.Sprintf("+1216555%04d", i)}
+					_, _, errs[i] = Claim(context.Background(), d, s, "2026-09-27", p, []Pick{{OccurrenceID: occ(s, 0)}})
+				}()
+			}
+			close(start)
+			wg.Wait()
+			won, filled := 0, 0
+			for _, err := range errs {
+				var full *FullError
+				switch {
+				case err == nil:
+					won++
+				case errors.As(err, &full):
+					filled++
+				default:
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+			if won != places || filled != racers-places {
+				t.Fatalf("%d confirmed, %d told it filled; want %d and %d", won, filled, places, racers-places)
+			}
+			if n := count(t, d, `SELECT coalesce(sum(quantity), 0) FROM claims WHERE status = 'confirmed'`); n != places {
+				t.Fatalf("%d places confirmed in the database, want %d", n, places)
+			}
+			if n := count(t, d, `SELECT count(*) FROM people`); n != places {
+				t.Fatalf("%d people stored, want %d (losers leave nothing behind)", n, places)
+			}
+		})
 	}
 }

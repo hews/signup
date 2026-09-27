@@ -212,20 +212,20 @@ func (p Person) normalised(collectEmail string) (Person, error) {
 		}
 		p.Phone = e164
 	}
+	if collectEmail == "off" {
+		p.Email = "" // the form has no email field; ignore anything sent anyway
+	}
 	if p.Email != "" {
 		a, err := mail.ParseAddress(p.Email)
 		if err != nil || a.Address != p.Email || !strings.Contains(p.Email, ".") {
 			bad["email"] = "Enter an email address like name@example.org."
 		}
 	}
-	if collectEmail == "off" {
-		p.Email = ""
-	}
 	switch {
-	case p.Phone == "" && p.Email == "" && bad["phone"] == "" && bad["email"] == "":
-		bad["phone"] = "Enter a mobile number, or an email address if you have no mobile."
 	case collectEmail == "required" && p.Email == "" && bad["email"] == "":
 		bad["email"] = "This sheet asks for an email address."
+	case p.Phone == "" && p.Email == "" && bad["phone"] == "" && bad["email"] == "":
+		bad["phone"] = "Enter a mobile number, or an email address if you have no mobile."
 	}
 	if len(bad) > 0 {
 		return p, bad

@@ -6,7 +6,7 @@ Invariants. Every change keeps all of these true; the tests that check them stay
   numbers or addresses. `internal/logx` redacts defensively; that is a backstop, not
   permission. Request logs carry the route pattern, never the query string or body.
 - **No secrets in the repository.** Configuration comes from the environment
-  (`deploy/env.example` documents the keys). A committed credential is an incident.
+  (the README's Deploy table documents every key). A committed credential is an incident.
 - **No third-party origins on any page.** The content security policy is `'self'`; no
   external scripts, fonts, analytics or embeds.
 - **Every organisation's data is isolated.** Once organisations exist, every query is scoped

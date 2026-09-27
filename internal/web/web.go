@@ -20,9 +20,10 @@ var templateFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
-// Handler returns the application's root handler.
-func Handler(d *sql.DB, logger *slog.Logger) http.Handler {
-	p := loadPages()
+// Handler returns the application's root handler. baseURL is the scheme and host for links
+// people copy; "" derives it from each request.
+func Handler(d *sql.DB, logger *slog.Logger, baseURL string) http.Handler {
+	p := loadPages(logger)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz(d))
 	mux.HandleFunc("GET /robots.txt", robots)
@@ -31,13 +32,16 @@ func Handler(d *sql.DB, logger *slog.Logger) http.Handler {
 	})
 	static, _ := fs.Sub(staticFS, "static")
 	mux.Handle("GET /static/", cacheFor(time.Hour, http.StripPrefix("/static/", http.FileServerFS(static))))
-	organiser{db: d, logger: logger, pages: p}.routes(mux)
+	organiser{db: d, logger: logger, pages: p, baseURL: baseURL}.routes(mux)
 	// Refuse cross-site form posts: browsers mark them with Sec-Fetch-Site / Origin.
 	return requestLog(logger, secureHeaders(http.NewCrossOriginProtection().Handler(mux)))
 }
 
 // pages holds one parsed template set per page, each wrapped in the shared layout.
-type pages map[string]*template.Template
+type pages struct {
+	t      map[string]*template.Template
+	logger *slog.Logger
+}
 
 var templateFuncs = template.FuncMap{
 	"fmtDay":      func(d string) string { return fmtDate(d, "Mon") },
@@ -45,10 +49,10 @@ var templateFuncs = template.FuncMap{
 	"fmtSlotTime": fmtSlotTime,
 }
 
-func loadPages() pages {
-	p := pages{}
+func loadPages(logger *slog.Logger) pages {
+	p := pages{t: map[string]*template.Template{}, logger: logger}
 	for _, name := range []string{"home", "new", "manage"} {
-		p[name] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
+		p.t[name] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
 			"templates/layout.html", "templates/"+name+".html"))
 	}
 	return p
@@ -57,7 +61,8 @@ func loadPages() pages {
 // render writes a page, buffering it first so a template error never sends half a page.
 func (p pages) render(w http.ResponseWriter, status int, name string, data any) {
 	var buf bytes.Buffer
-	if err := p[name].ExecuteTemplate(&buf, "layout", data); err != nil {
+	if err := p.t[name].ExecuteTemplate(&buf, "layout", data); err != nil {
+		p.logger.Error("template failed", "page", name, "err", err)
 		http.Error(w, "Something went wrong on our side. Please try again.", http.StatusInternalServerError)
 		return
 	}

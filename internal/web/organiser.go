@@ -33,9 +33,10 @@ type organiserPage struct {
 }
 
 type organiser struct {
-	db     *sql.DB
-	logger *slog.Logger
-	pages  pages
+	db      *sql.DB
+	logger  *slog.Logger
+	pages   pages
+	baseURL string
 }
 
 func (o organiser) routes(mux *http.ServeMux) {
@@ -143,7 +144,7 @@ func (o organiser) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := sheet.Publish(r.Context(), o.db, s)
-	if err == nil {
+	if err == nil && s.Status == sheet.Draft {
 		o.logger.Info("sheet published", "sheet", s.ID)
 	}
 	o.after(w, r, s, err, 0)
@@ -176,7 +177,7 @@ func (o organiser) show(w http.ResponseWriter, r *http.Request, status int, s sh
 	w.Header().Set("Cache-Control", "no-store")
 	o.pages.render(w, status, "manage", organiserPage{
 		Sheet: s, Form: form, Errors: bad, OpenSection: openSection,
-		AdminPath: adminPath(token), SharePath: sharePath(s.Slug), ShareURL: baseURL(r) + sharePath(s.Slug),
+		AdminPath: adminPath(token), SharePath: sharePath(s.Slug), ShareURL: o.linkBase(r) + sharePath(s.Slug),
 	})
 }
 
@@ -229,8 +230,12 @@ func pathID(r *http.Request) int64 {
 func adminPath(token string) string { return "/o/" + url.PathEscape(token) }
 func sharePath(slug string) string  { return "/s/" + url.PathEscape(slug) }
 
-// baseURL is the scheme and host a person reached us on, for links they will copy.
-func baseURL(r *http.Request) string {
+// linkBase is the scheme and host for links people copy: the configured base URL, else the
+// one this request arrived on (trusting the proxy's Host and X-Forwarded-Proto).
+func (o organiser) linkBase(r *http.Request) string {
+	if o.baseURL != "" {
+		return o.baseURL
+	}
 	scheme := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"

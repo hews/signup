@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Formats a sheet can take in M1.
@@ -217,8 +218,8 @@ func AddSection(ctx context.Context, d *sql.DB, s Sheet, title, date string) err
 		}
 		date = ""
 	}
-	if len(title) > maxShort {
-		bad["title"] = fmt.Sprintf("Keep it under %d characters.", maxShort)
+	if utf8.RuneCountInString(title) > maxShort {
+		bad["title"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxShort)
 	}
 	if len(bad) > 0 {
 		return bad
@@ -226,6 +227,9 @@ func AddSection(ctx context.Context, d *sql.DB, s Sheet, title, date string) err
 	_, err := d.ExecContext(ctx, `INSERT INTO sections (sheet_id, position, title, date)
 		VALUES (?, (SELECT coalesce(max(position), -1) + 1 FROM sections WHERE sheet_id = ?), ?, nullif(?, ''))`,
 		s.ID, s.ID, title, date)
+	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: sections.sheet_id, sections.date") {
+		return Invalid{"date": "That date is already on the sheet."}
+	}
 	return err
 }
 
@@ -240,11 +244,11 @@ func AddSlot(ctx context.Context, d *sql.DB, s Sheet, sectionID int64, in SlotIn
 	bad := Invalid{}
 	if in.Title == "" {
 		bad["slot_title"] = "Name the slot, e.g. “Crafts table”."
-	} else if len(in.Title) > maxShort {
-		bad["slot_title"] = fmt.Sprintf("Keep it under %d characters.", maxShort)
+	} else if utf8.RuneCountInString(in.Title) > maxShort {
+		bad["slot_title"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxShort)
 	}
-	if len(in.Description) > maxDescription {
-		bad["slot_description"] = fmt.Sprintf("Keep it under %d characters.", maxDescription)
+	if utf8.RuneCountInString(in.Description) > maxDescription {
+		bad["slot_description"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxDescription)
 	}
 	if in.Quantity < 0 || in.Quantity > maxQuantity {
 		bad["quantity"] = fmt.Sprintf("Between 1 and %d, or leave blank for no limit.", maxQuantity)
@@ -289,7 +293,7 @@ func RemoveSlot(ctx context.Context, d *sql.DB, s Sheet, slotID int64) error {
 	if !s.hasSlot(slotID) {
 		return ErrNotFound
 	}
-	return removeUnclaimed(ctx, d, `DELETE FROM slots WHERE id = ?`, slotID,
+	return removeUnclaimed(ctx, d, s.ID, `DELETE FROM slots WHERE id = ?`, slotID,
 		`SELECT count(*) FROM claims c JOIN occurrences o ON o.id = c.occurrence_id
 		 WHERE o.slot_id = ? AND c.status <> 'cancelled'`)
 }
@@ -300,12 +304,12 @@ func RemoveSection(ctx context.Context, d *sql.DB, s Sheet, sectionID int64) err
 	if _, ok := s.section(sectionID); !ok {
 		return ErrNotFound
 	}
-	return removeUnclaimed(ctx, d, `DELETE FROM sections WHERE id = ?`, sectionID,
+	return removeUnclaimed(ctx, d, s.ID, `DELETE FROM sections WHERE id = ?`, sectionID,
 		`SELECT count(*) FROM claims c JOIN occurrences o ON o.id = c.occurrence_id
 		 JOIN slots sl ON sl.id = o.slot_id WHERE sl.section_id = ? AND c.status <> 'cancelled'`)
 }
 
-func removeUnclaimed(ctx context.Context, d *sql.DB, del string, id int64, count string) error {
+func removeUnclaimed(ctx context.Context, d *sql.DB, sheetID int64, del string, id int64, count string) error {
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -321,11 +325,23 @@ func removeUnclaimed(ctx context.Context, d *sql.DB, del string, id int64, count
 	if _, err := tx.ExecContext(ctx, del, id); err != nil {
 		return err
 	}
+	// The cascade took any cancelled claims with it; nobody's details stay without a claim.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM people WHERE sheet_id = ?
+		AND NOT EXISTS (SELECT 1 FROM claims WHERE claims.person_id = people.id)`, sheetID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
-// Publish opens a draft sheet to sign-ups. A sheet needs at least one slot first.
+// Publish opens a draft sheet to sign-ups. A sheet needs at least one slot first; publishing
+// an open sheet again changes nothing, and a closed sheet stays closed.
 func Publish(ctx context.Context, d *sql.DB, s Sheet) error {
+	switch s.Status {
+	case Open:
+		return nil
+	case Closed:
+		return Invalid{"publish": "This sheet is closed."}
+	}
 	if s.Slots() == 0 {
 		return Invalid{"publish": "Add at least one slot first."}
 	}
@@ -369,17 +385,17 @@ func (b Basics) validate() error {
 	bad := Invalid{}
 	if b.Title == "" {
 		bad["title"] = "Give the sheet a title."
-	} else if len(b.Title) > maxTitle {
-		bad["title"] = fmt.Sprintf("Keep it under %d characters.", maxTitle)
+	} else if utf8.RuneCountInString(b.Title) > maxTitle {
+		bad["title"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxTitle)
 	}
-	if len(b.Description) > maxDescription {
-		bad["description"] = fmt.Sprintf("Keep it under %d characters.", maxDescription)
+	if utf8.RuneCountInString(b.Description) > maxDescription {
+		bad["description"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxDescription)
 	}
-	if len(b.OrganizerName) > maxShort {
-		bad["organizer_name"] = fmt.Sprintf("Keep it under %d characters.", maxShort)
+	if utf8.RuneCountInString(b.OrganizerName) > maxShort {
+		bad["organizer_name"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxShort)
 	}
-	if len(b.Location) > maxShort {
-		bad["location"] = fmt.Sprintf("Keep it under %d characters.", maxShort)
+	if utf8.RuneCountInString(b.Location) > maxShort {
+		bad["location"] = fmt.Sprintf("Keep it to %d characters or fewer.", maxShort)
 	}
 	if _, err := time.LoadLocation(b.TimeZone); b.TimeZone == "" || b.TimeZone == "Local" || err != nil {
 		bad["time_zone"] = "Choose a time zone."

@@ -25,7 +25,7 @@ func newServer(t *testing.T) (*httptest.Server, *bytes.Buffer) {
 		t.Fatal(err)
 	}
 	var logs bytes.Buffer
-	srv := httptest.NewServer(Handler(d, logx.New(&logs, slog.LevelDebug)))
+	srv := httptest.NewServer(Handler(d, logx.New(&logs, slog.LevelDebug), ""))
 	t.Cleanup(srv.Close)
 	return srv, &logs
 }

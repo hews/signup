@@ -1,12 +1,19 @@
 package web
 
 import (
+	"context"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/hews/signup/internal/db"
+	"github.com/hews/signup/internal/logx"
 )
 
 var addSlotAction = regexp.MustCompile(`action="(/o/[^"]+/sections/(\d+))/slots"`)
@@ -115,6 +122,29 @@ func TestOrganiserBuildsAndPublishesASheet(t *testing.T) {
 	token := strings.TrimPrefix(admin, "/o/")
 	if out := logs.String(); strings.Contains(out, token) || strings.Contains(out, "Class party") {
 		t.Fatalf("logs carry the admin token or sheet text:\n%s", out)
+	}
+}
+
+func TestShareLinkUsesConfiguredBaseURL(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := db.Migrate(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler(d, logx.New(io.Discard, slog.LevelError), "https://sheets.example.org"))
+	t.Cleanup(srv.Close)
+	admin := createSheet(t, srv.URL, "slots_only")
+	wantStatus(t, post(t, srv.URL+admin+"/sections", url.Values{"title": {"Bring"}}), http.StatusSeeOther)
+	_, page := get(t, srv.URL+admin)
+	path, _ := firstSection(t, page)
+	wantStatus(t, post(t, srv.URL+path+"/slots", url.Values{"slot_title": {"Napkins"}}), http.StatusSeeOther)
+	wantStatus(t, post(t, srv.URL+admin+"/publish", nil), http.StatusSeeOther)
+	_, page = get(t, srv.URL+admin)
+	if !strings.Contains(page, `value="https://sheets.example.org/s/`) {
+		t.Fatal("share link does not use the configured base URL")
 	}
 }
 

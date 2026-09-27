@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hews/signup/internal/db"
@@ -230,6 +231,13 @@ func TestRemoveRefusesWhileClaimed(t *testing.T) {
 	if err := RemoveSlot(ctx, d, s, slot.ID); err != nil {
 		t.Errorf("RemoveSlot after cancellation: %v", err)
 	}
+	var people int
+	if err := d.QueryRow(`SELECT count(*) FROM people WHERE sheet_id = ?`, s.ID).Scan(&people); err != nil {
+		t.Fatal(err)
+	}
+	if people != 0 {
+		t.Errorf("%d people left with no claim after removing the slot, want 0", people)
+	}
 }
 
 func TestPublishNeedsASlot(t *testing.T) {
@@ -253,5 +261,42 @@ func TestPublishNeedsASlot(t *testing.T) {
 	}
 	if got := reload(t, d, token).Status; got != Open {
 		t.Fatalf("status = %q, want open", got)
+	}
+	if err := Publish(ctx, d, reload(t, d, token)); err != nil {
+		t.Errorf("publishing an open sheet again: %v", err)
+	}
+	if _, err := d.Exec(`UPDATE sheets SET status = 'closed' WHERE id = ?`, s.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := Publish(ctx, d, reload(t, d, token)); !errors.As(err, &bad) {
+		t.Errorf("publishing a closed sheet: err = %v, want Invalid", err)
+	}
+}
+
+func TestLimitsCountCharactersNotBytes(t *testing.T) {
+	d := testDB(t)
+	b := basics(SlotsOnly)
+	b.Title = strings.Repeat("班", 120) // 360 bytes, 120 characters
+	if _, _, err := Create(context.Background(), d, b); err != nil {
+		t.Fatalf("120-character title: %v", err)
+	}
+	b.Title = strings.Repeat("班", 121)
+	var bad Invalid
+	if _, _, err := Create(context.Background(), d, b); !errors.As(err, &bad) || bad["title"] == "" {
+		t.Fatalf("121-character title: err = %v, want Invalid[title]", err)
+	}
+}
+
+func TestSameDateTwiceIsRefusedByTheDatabase(t *testing.T) {
+	d := testDB(t)
+	ctx := context.Background()
+	s, _ := mustCreate(t, d, ByDate)
+	// Both calls use the sheet as loaded before either ran, as two concurrent requests would.
+	if err := AddSection(ctx, d, s, "", "2026-10-30"); err != nil {
+		t.Fatal(err)
+	}
+	var bad Invalid
+	if err := AddSection(ctx, d, s, "", "2026-10-30"); !errors.As(err, &bad) || bad["date"] == "" {
+		t.Fatalf("second add of the same date: err = %v, want Invalid[date]", err)
 	}
 }

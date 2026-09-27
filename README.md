@@ -45,7 +45,7 @@ downloaded binary came from this repository's release workflow:
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing
 gh attestation verify signup-v0.1.0-linux-amd64 --repo hews/signup
-./signup-v0.1.0-linux-amd64 -version
+chmod +x signup-v0.1.0-linux-amd64 && ./signup-v0.1.0-linux-amd64 -version
 ```
 
 ## How this is built

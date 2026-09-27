@@ -22,7 +22,7 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) == 2 && (os.Args[1] == "-version" || os.Args[1] == "--version") {
+	if wantsVersion(os.Args[1:]) {
 		fmt.Println(version)
 		return
 	}
@@ -30,6 +30,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "signup:", err)
 		os.Exit(1)
 	}
+}
+
+// wantsVersion reports whether the arguments ask only for the version.
+func wantsVersion(args []string) bool {
+	return len(args) == 1 && (args[0] == "-version" || args[0] == "--version")
 }
 
 func run() error {

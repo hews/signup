@@ -11,7 +11,12 @@
 -- their SHA-256 is stored here.
 --
 -- Times are ISO 8601 text: dates YYYY-MM-DD, times HH:MM in the sheet's time zone,
--- instants UTC with a Z.
+-- instants UTC with a Z. Date and time columns must round-trip through SQLite's own date()
+-- and strftime(), so impossible values such as 2026-02-30 or 29:59 are refused. An
+-- occurrence whose end is earlier than its start runs past midnight into the next day.
+--
+-- Deleting a sheet deletes everything under it, including the people who signed up to it:
+-- in M1 a person belongs to exactly one sheet, so nothing personal outlives the sheet.
 
 CREATE TABLE sheets (
     id               INTEGER PRIMARY KEY,
@@ -36,7 +41,7 @@ CREATE TABLE sections (
     sheet_id INTEGER NOT NULL REFERENCES sheets (id) ON DELETE CASCADE,
     position INTEGER NOT NULL,
     title    TEXT    NOT NULL DEFAULT '',
-    date     TEXT    CHECK (date IS NULL OR date GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
+    date     TEXT    CHECK (date IS NULL OR date(date) IS date),
     UNIQUE (sheet_id, position)
 );
 
@@ -56,21 +61,24 @@ CREATE TABLE slots (
 CREATE TABLE occurrences (
     id         INTEGER PRIMARY KEY,
     slot_id    INTEGER NOT NULL REFERENCES slots (id) ON DELETE CASCADE,
-    date       TEXT    CHECK (date IS NULL OR date GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
-    start_time TEXT    CHECK (start_time IS NULL OR start_time GLOB '[0-2][0-9]:[0-5][0-9]'),
-    end_time   TEXT    CHECK (end_time IS NULL OR end_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+    date       TEXT    CHECK (date IS NULL OR date(date) IS date),
+    start_time TEXT    CHECK (start_time IS NULL OR strftime('%H:%M', start_time) IS start_time),
+    end_time   TEXT    CHECK (end_time IS NULL OR strftime('%H:%M', end_time) IS end_time),
     CHECK (end_time IS NULL OR start_time IS NOT NULL),
-    CHECK (end_time IS NULL OR end_time > start_time)
+    CHECK (end_time IS NULL OR end_time <> start_time)
 );
 
--- A person as they signed up. Contacts are not unique: the same number on two sheets is
--- two rows until identity (M2) merges them.
+-- A person as they signed up to one sheet. Contacts are not unique: the same number on two
+-- sheets is two rows. Identity (M2) adds its own, separately scoped table rather than
+-- merging these.
 CREATE TABLE people (
     id         INTEGER PRIMARY KEY,
+    sheet_id   INTEGER NOT NULL REFERENCES sheets (id) ON DELETE CASCADE,
     first_name TEXT NOT NULL CHECK (length(trim(first_name)) > 0),
     last_name  TEXT NOT NULL DEFAULT '',
     -- E.164, e.g. +12165550142.
-    phone      TEXT CHECK (phone IS NULL OR phone GLOB '+[1-9][0-9]*'),
+    phone      TEXT CHECK (phone IS NULL OR (phone GLOB '+[1-9]*' AND phone NOT GLOB '+*[^0-9]*'
+                                         AND length(phone) BETWEEN 8 AND 16)),
     email      TEXT CHECK (email IS NULL OR email LIKE '%_@_%'),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (phone IS NOT NULL OR email IS NOT NULL)
@@ -79,7 +87,7 @@ CREATE TABLE people (
 CREATE TABLE claims (
     id                INTEGER PRIMARY KEY,
     occurrence_id     INTEGER NOT NULL REFERENCES occurrences (id) ON DELETE CASCADE,
-    person_id         INTEGER NOT NULL REFERENCES people (id),
+    person_id         INTEGER NOT NULL REFERENCES people (id) ON DELETE CASCADE,
     quantity          INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     comment           TEXT    NOT NULL DEFAULT '',
     status            TEXT    NOT NULL CHECK (status IN ('confirmed', 'waitlisted', 'cancelled')),
@@ -98,5 +106,6 @@ CREATE INDEX occurrences_by_slot ON occurrences (slot_id);
 -- Capacity is summed over live claims per occurrence on every claim.
 CREATE INDEX claims_by_occurrence ON claims (occurrence_id, status);
 CREATE INDEX claims_by_person ON claims (person_id);
+CREATE INDEX people_by_sheet ON people (sheet_id);
 
 UPDATE meta SET value = '2' WHERE key = 'schema';

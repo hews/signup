@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,7 +73,7 @@ func seedSheet(t *testing.T, d *sql.DB) int64 {
 		{`INSERT INTO sections (id, sheet_id, position, date) VALUES (1, 1, 0, '2026-10-30')`, nil},
 		{`INSERT INTO slots (id, section_id, position, title, quantity_wanted) VALUES (1, 1, 0, 'Crafts table', 3)`, nil},
 		{`INSERT INTO occurrences (id, slot_id, date, start_time, end_time) VALUES (1, 1, '2026-10-30', '13:00', '14:30')`, nil},
-		{`INSERT INTO people (id, first_name, last_name, phone) VALUES (1, 'Jenny', 'R', '+12165550142')`, nil},
+		{`INSERT INTO people (id, sheet_id, first_name, last_name, phone) VALUES (1, 1, 'Jenny', 'R', '+12165550142')`, nil},
 		{`INSERT INTO claims (id, occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
 		  VALUES (1, 1, 1, 'confirmed', ?, '2026-11-29T00:00:00Z')`, []any{hash32(2)}},
 	}
@@ -97,40 +98,68 @@ func TestSheetsMigrationApplies(t *testing.T) {
 }
 
 func TestSheetsSchemaRejectsBadRows(t *testing.T) {
+	const (
+		check  = "CHECK constraint failed"
+		unique = "UNIQUE constraint failed"
+		fk     = "FOREIGN KEY constraint failed"
+	)
 	cases := []struct {
 		name string
 		q    string
 		args []any
+		want string
 	}{
 		{"unknown format", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format)
-			VALUES ('zzzzzzzzzz', ?, 'T', 'UTC', 'rsvp')`, []any{hash32(9)}},
+			VALUES ('zzzzzzzzzz', ?, 'T', 'UTC', 'rsvp')`, []any{hash32(9)}, check},
 		{"short slug", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format)
-			VALUES ('short', ?, 'T', 'UTC', 'slots_only')`, []any{hash32(9)}},
+			VALUES ('short', ?, 'T', 'UTC', 'slots_only')`, []any{hash32(9)}, check},
 		{"duplicate slug", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format)
-			VALUES ('abcdefghij', ?, 'T', 'UTC', 'slots_only')`, []any{hash32(9)}},
+			VALUES ('abcdefghij', ?, 'T', 'UTC', 'slots_only')`, []any{hash32(9)}, unique},
 		{"blank title", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format)
-			VALUES ('zzzzzzzzzz', ?, '  ', 'UTC', 'slots_only')`, []any{hash32(9)}},
+			VALUES ('zzzzzzzzzz', ?, '  ', 'UTC', 'slots_only')`, []any{hash32(9)}, check},
 		{"token hash not 32 bytes", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format)
-			VALUES ('zzzzzzzzzz', x'00', 'T', 'UTC', 'slots_only')`, nil},
-		{"malformed date", `INSERT INTO sections (sheet_id, position, date) VALUES (1, 5, '30/10/2026')`, nil},
-		{"zero quantity", `INSERT INTO slots (section_id, position, title, quantity_wanted) VALUES (1, 5, 'X', 0)`, nil},
-		{"end before start", `INSERT INTO occurrences (slot_id, start_time, end_time) VALUES (1, '14:00', '13:00')`, nil},
-		{"end without start", `INSERT INTO occurrences (slot_id, end_time) VALUES (1, '13:00')`, nil},
-		{"person without contact", `INSERT INTO people (first_name) VALUES ('Sam')`, nil},
-		{"phone not E.164", `INSERT INTO people (first_name, phone) VALUES ('Sam', '216-555-0142')`, nil},
+			VALUES ('zzzzzzzzzz', x'00', 'T', 'UTC', 'slots_only')`, nil, check},
+		{"malformed date", `INSERT INTO sections (sheet_id, position, date) VALUES (1, 5, '30/10/2026')`, nil, check},
+		{"impossible date", `INSERT INTO sections (sheet_id, position, date) VALUES (1, 5, '2026-02-30')`, nil, check},
+		{"zero quantity", `INSERT INTO slots (section_id, position, title, quantity_wanted) VALUES (1, 5, 'X', 0)`, nil, check},
+		{"impossible time", `INSERT INTO occurrences (slot_id, start_time) VALUES (1, '29:59')`, nil, check},
+		{"end equals start", `INSERT INTO occurrences (slot_id, start_time, end_time) VALUES (1, '13:00', '13:00')`, nil, check},
+		{"end without start", `INSERT INTO occurrences (slot_id, end_time) VALUES (1, '13:00')`, nil, check},
+		{"person without contact", `INSERT INTO people (sheet_id, first_name) VALUES (1, 'Sam')`, nil, check},
+		{"phone without plus", `INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Sam', '216-555-0142')`, nil, check},
+		{"phone with spaces", `INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Sam', '+1 216-555-0142')`, nil, check},
+		{"phone with letters", `INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Sam', '+1abc5550142')`, nil, check},
+		{"phone too long", `INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Sam', '+12165550142000000')`, nil, check},
+		{"person for missing sheet", `INSERT INTO people (sheet_id, first_name, phone) VALUES (99, 'Sam', '+12165550142')`, nil, fk},
 		{"cancelled without cancelled_at", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
-			VALUES (1, 1, 'cancelled', ?, '2026-11-29T00:00:00Z')`, []any{hash32(9)}},
+			VALUES (1, 1, 'cancelled', ?, '2026-11-29T00:00:00Z')`, []any{hash32(9)}, check},
 		{"claim for missing occurrence", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
-			VALUES (99, 1, 'confirmed', ?, '2026-11-29T00:00:00Z')`, []any{hash32(9)}},
+			VALUES (99, 1, 'confirmed', ?, '2026-11-29T00:00:00Z')`, []any{hash32(9)}, fk},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			d := migrated(t)
 			seedSheet(t, d)
-			if _, err := d.Exec(c.q, c.args...); err == nil {
-				t.Fatal("insert succeeded, want a constraint error")
+			_, err := d.Exec(c.q, c.args...)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("err = %v, want %q", err, c.want)
 			}
 		})
+	}
+}
+
+func TestSheetsSchemaAcceptsEdgeValues(t *testing.T) {
+	d := migrated(t)
+	seedSheet(t, d)
+	for _, q := range []string{
+		`INSERT INTO occurrences (slot_id, date, start_time, end_time) VALUES (1, '2028-02-29', '22:00', '02:00')`,
+		`INSERT INTO slots (section_id, position, title) VALUES (1, 1, 'Anything else')`,
+		`INSERT INTO people (sheet_id, first_name, email) VALUES (1, 'Sam', 'sam@example.org')`,
+		`INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Ana', '+442079460958')`,
+	} {
+		if _, err := d.Exec(q); err != nil {
+			t.Errorf("%s: %v", q, err)
+		}
 	}
 }
 
@@ -140,7 +169,7 @@ func TestDeletingSheetCascades(t *testing.T) {
 	if _, err := d.Exec(`DELETE FROM sheets WHERE id = ?`, id); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"sections", "slots", "occurrences", "claims"} {
+	for _, table := range []string{"sections", "slots", "occurrences", "people", "claims"} {
 		var n int
 		if err := d.QueryRow(`SELECT count(*) FROM ` + table).Scan(&n); err != nil {
 			t.Fatal(err)

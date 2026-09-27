@@ -475,3 +475,48 @@ func newSlug() (string, error) {
 	}
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b)), nil
 }
+
+// Taken is who holds places on one occurrence, as other participants may see them.
+type Taken struct {
+	Count int      // places held (sum of quantities)
+	Names []string // public names, in the order people signed up
+}
+
+// TakenBy returns, per occurrence of this sheet, the confirmed places and the public names of
+// the people holding them. Contacts never leave this function; names are reduced to what the
+// sheet's ceiling allows (in M1: first name and last initial).
+func TakenBy(ctx context.Context, d *sql.DB, s Sheet) (map[int64]Taken, error) {
+	rows, err := d.QueryContext(ctx, `SELECT c.occurrence_id, p.first_name, p.last_name, c.quantity
+		FROM claims c
+		JOIN people p ON p.id = c.person_id
+		WHERE p.sheet_id = ? AND c.status = 'confirmed'
+		ORDER BY c.created_at, c.id`, s.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]Taken{}
+	for rows.Next() {
+		var occ int64
+		var first, last string
+		var qty int
+		if err := rows.Scan(&occ, &first, &last, &qty); err != nil {
+			return nil, err
+		}
+		t := out[occ]
+		t.Count += qty
+		t.Names = append(t.Names, PublicName(first, last))
+		out[occ] = t
+	}
+	return out, rows.Err()
+}
+
+// PublicName is how a person appears to other participants: "Jenny R.".
+func PublicName(first, last string) string {
+	first, last = strings.TrimSpace(first), strings.TrimSpace(last)
+	if last == "" {
+		return first
+	}
+	r, _ := utf8.DecodeRuneInString(last)
+	return first + " " + strings.ToUpper(string(r)) + "."
+}

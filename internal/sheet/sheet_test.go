@@ -324,3 +324,57 @@ func TestSameDateTwiceIsRefusedByTheDatabase(t *testing.T) {
 		t.Fatalf("second add of the same date: err = %v, want Invalid[date]", err)
 	}
 }
+
+func TestPublicName(t *testing.T) {
+	for _, c := range []struct{ first, last, want string }{
+		{"Jenny", "Rivera", "Jenny R."},
+		{"Jenny", "rivera", "Jenny R."},
+		{"Sam", "", "Sam"},
+		{" Ana ", " Ólafsdóttir", "Ana Ó."},
+		{"Mei", "陳", "Mei 陳."},
+	} {
+		if got := PublicName(c.first, c.last); got != c.want {
+			t.Errorf("PublicName(%q, %q) = %q, want %q", c.first, c.last, got, c.want)
+		}
+	}
+}
+
+func TestTakenByCountsConfirmedPlacesOnly(t *testing.T) {
+	d := testDB(t)
+	ctx := context.Background()
+	s, token := mustCreate(t, d, SlotsOnly)
+	if err := AddSection(ctx, d, s, "Jobs", ""); err != nil {
+		t.Fatal(err)
+	}
+	s = reload(t, d, token)
+	if err := AddSlot(ctx, d, s, s.Sections[0].ID, SlotInput{Title: "Setup", Quantity: 4}); err != nil {
+		t.Fatal(err)
+	}
+	s = reload(t, d, token)
+	occ := s.Sections[0].Slots[0].OccurrenceID
+	for i, c := range []struct {
+		first, status string
+		qty           int
+	}{{"Jenny", "confirmed", 2}, {"Sam", "waitlisted", 1}, {"Ana", "cancelled", 1}, {"Lee", "confirmed", 1}} {
+		if _, err := d.Exec(`INSERT INTO people (id, sheet_id, first_name, last_name, phone) VALUES (?, ?, ?, 'Q', '+12165550100')`, i+1, s.ID, c.first); err != nil {
+			t.Fatal(err)
+		}
+		_, hash, _ := NewToken()
+		var cancelled any
+		if c.status == "cancelled" {
+			cancelled = "2026-10-01T09:00:00.000Z"
+		}
+		if _, err := d.Exec(`INSERT INTO claims (occurrence_id, person_id, quantity, status, manage_token_hash, manage_expires_at, cancelled_at)
+			VALUES (?, ?, ?, ?, ?, '2099-01-01T00:00:00.000Z', ?)`, occ, i+1, c.qty, c.status, hash, cancelled); err != nil {
+			t.Fatal(err)
+		}
+	}
+	taken, err := TakenBy(ctx, d, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := taken[occ]
+	if got.Count != 3 || strings.Join(got.Names, ",") != "Jenny Q.,Lee Q." {
+		t.Fatalf("taken = %+v, want 3 places held by Jenny Q. and Lee Q.", got)
+	}
+}

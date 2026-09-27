@@ -254,6 +254,19 @@ func TestSheetTextIsEscaped(t *testing.T) {
 	}
 }
 
+func TestStylesheetsAreFingerprinted(t *testing.T) {
+	srv, _ := newServer(t)
+	_, page := get(t, srv.URL+"/")
+	for _, f := range []string{"tokens.css", "app.css"} {
+		if !strings.Contains(page, `href="/static/`+f+`?v=`+assetVersion+`"`) {
+			t.Errorf("layout does not link %s with the build fingerprint", f)
+		}
+	}
+	if len(assetVersion) != 12 {
+		t.Errorf("assetVersion = %q", assetVersion)
+	}
+}
+
 func TestStaticAssetsAreServed(t *testing.T) {
 	srv, _ := newServer(t)
 	for _, f := range []string{"/static/tokens.css", "/static/app.css"} {

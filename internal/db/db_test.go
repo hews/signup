@@ -75,7 +75,7 @@ func seedSheet(t *testing.T, d *sql.DB) int64 {
 		{`INSERT INTO occurrences (id, slot_id, date, start_time, end_time) VALUES (1, 1, '2026-10-30', '13:00', '14:30')`, nil},
 		{`INSERT INTO people (id, sheet_id, first_name, last_name, phone) VALUES (1, 1, 'Jenny', 'R', '+12165550142')`, nil},
 		{`INSERT INTO claims (id, occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
-		  VALUES (1, 1, 1, 'confirmed', ?, '2026-11-29T00:00:00Z')`, []any{hash32(2)}},
+		  VALUES (1, 1, 1, 'confirmed', ?, '2026-11-29T00:00:00.000Z')`, []any{hash32(2)}},
 	}
 	for _, s := range stmts {
 		if _, err := d.Exec(s.q, s.args...); err != nil {
@@ -132,9 +132,15 @@ func TestSheetsSchemaRejectsBadRows(t *testing.T) {
 		{"phone too long", `INSERT INTO people (sheet_id, first_name, phone) VALUES (1, 'Sam', '+12165550142000000')`, nil, check},
 		{"person for missing sheet", `INSERT INTO people (sheet_id, first_name, phone) VALUES (99, 'Sam', '+12165550142')`, nil, fk},
 		{"cancelled without cancelled_at", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
-			VALUES (1, 1, 'cancelled', ?, '2026-11-29T00:00:00Z')`, []any{hash32(9)}, check},
+			VALUES (1, 1, 'cancelled', ?, '2026-11-29T00:00:00.000Z')`, []any{hash32(9)}, check},
+		{"expiry not in the stored format", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
+			VALUES (1, 1, 'confirmed', ?, '2026-11-29 00:00:00')`, []any{hash32(9)}, check},
+		{"cancelled_at not in the stored format", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at, cancelled_at)
+			VALUES (1, 1, 'cancelled', ?, '2026-11-29T00:00:00.000Z', '2026-10-01T09:00:00+00:00')`, []any{hash32(9)}, check},
+		{"empty time zone", `INSERT INTO sheets (slug, admin_token_hash, title, time_zone, format)
+			VALUES ('zzzzzzzzzz', ?, 'T', '', 'slots_only')`, []any{hash32(9)}, check},
 		{"claim for missing occurrence", `INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
-			VALUES (99, 1, 'confirmed', ?, '2026-11-29T00:00:00Z')`, []any{hash32(9)}, fk},
+			VALUES (99, 1, 'confirmed', ?, '2026-11-29T00:00:00.000Z')`, []any{hash32(9)}, fk},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -145,6 +151,29 @@ func TestSheetsSchemaRejectsBadRows(t *testing.T) {
 				t.Fatalf("err = %v, want %q", err, c.want)
 			}
 		})
+	}
+}
+
+func TestClaimsCannotCrossSheets(t *testing.T) {
+	d := migrated(t)
+	seedSheet(t, d)
+	for _, q := range []string{
+		`INSERT INTO sheets (id, slug, admin_token_hash, title, time_zone, format)
+		 VALUES (2, 'klmnopqrst', x'` + strings.Repeat("22", 32) + `', 'Other sheet', 'UTC', 'slots_only')`,
+		`INSERT INTO people (id, sheet_id, first_name, phone) VALUES (2, 2, 'Sam', '+12165550199')`,
+	} {
+		if _, err := d.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := d.Exec(`INSERT INTO claims (occurrence_id, person_id, status, manage_token_hash, manage_expires_at)
+		VALUES (1, 2, 'confirmed', ?, '2026-11-29T00:00:00.000Z')`, hash32(9))
+	if err == nil || !strings.Contains(err.Error(), "claim crosses sheets") {
+		t.Fatalf("insert across sheets: err = %v, want the trigger to refuse it", err)
+	}
+	_, err = d.Exec(`UPDATE claims SET person_id = 2 WHERE id = 1`)
+	if err == nil || !strings.Contains(err.Error(), "claim crosses sheets") {
+		t.Fatalf("update across sheets: err = %v, want the trigger to refuse it", err)
 	}
 }
 

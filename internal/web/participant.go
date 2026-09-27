@@ -201,7 +201,9 @@ func (p participant) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	day := today(s.TimeZone)
-	picks := picked(s, r.PostForm["o"], day)
+	// Keep picks whose date passed while the form was open: Claim refuses them out loud,
+	// rather than signing the person up for only some of what they chose.
+	picks := picked(s, r.PostForm["o"], "")
 	if len(picks) == 0 {
 		http.Redirect(w, r, sharePath(s.Slug), http.StatusSeeOther)
 		return

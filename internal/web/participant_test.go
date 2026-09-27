@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -289,4 +290,42 @@ func TestClaimIgnoresSlotsFromOtherSheets(t *testing.T) {
 	}
 	res, _ = get(t, srv.URL+share+"/claim")
 	wantStatus(t, res, http.StatusSeeOther)
+}
+
+func TestPickOnAPastDateIsRefusedNotDropped(t *testing.T) {
+	srv, _, d := newServerDB(t)
+	_, share := publishedSheet(t, srv.URL, "2099-10-30", "Crafts table", "3")
+	_, page := get(t, srv.URL+share)
+	future := occurrences(t, page)[0]
+	// A second date that is already past by the time the form is sent.
+	var sheetID int64
+	if err := d.QueryRow(`SELECT id FROM sheets`).Scan(&sheetID); err != nil {
+		t.Fatal(err)
+	}
+	res, err := d.Exec(`INSERT INTO sections (sheet_id, position, date) VALUES (?, 9, '2000-01-01')`, sheetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, _ := res.LastInsertId()
+	res, err = d.Exec(`INSERT INTO slots (section_id, position, title, quantity_wanted) VALUES (?, 0, 'Old', 3)`, sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, _ := res.LastInsertId()
+	res, err = d.Exec(`INSERT INTO occurrences (slot_id, date) VALUES (?, '2000-01-01')`, slot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pastID, _ := res.LastInsertId()
+	past := strconv.FormatInt(pastID, 10)
+
+	r := post(t, srv.URL+share+"/claim", url.Values{"o": {future, past}, "first": {"Jenny"}, "phone": {"2165550142"}})
+	wantStatus(t, r, http.StatusUnprocessableEntity)
+	if !strings.Contains(body(t, r), "One of those dates has passed") {
+		t.Fatal("the past pick was not explained")
+	}
+	var n int
+	if err := d.QueryRow(`SELECT count(*) FROM claims`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("%d claims saved, want none (all or nothing)", n)
+	}
 }

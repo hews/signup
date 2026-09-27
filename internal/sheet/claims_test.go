@@ -270,3 +270,37 @@ func TestLastPlaceGoesToExactlyOne(t *testing.T) {
 		})
 	}
 }
+
+func TestNewcomersJoinTheQueueBehindThoseWaiting(t *testing.T) {
+	d := testDB(t)
+	ctx := context.Background()
+	s, _ := openSheet(t, d, "2099-10-30", 1)
+	if _, _, err := Claim(ctx, d, s, "2026-09-27", person("Sam", "2165550199"), []Pick{{OccurrenceID: occ(s, 0)}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, err := Claim(ctx, d, s, "2026-09-27", jenny, []Pick{{OccurrenceID: occ(s, 0), Waitlist: true}}); err != nil || out[0].Status != Waitlisted {
+		t.Fatalf("Jenny: %v, %+v", err, out)
+	}
+	// Sam's place frees up (as cancelling will do). Jenny is waiting, so Lee cannot take it.
+	if _, err := d.Exec(`UPDATE claims SET status = 'cancelled', cancelled_at = '2026-10-01T09:00:00.000Z'
+		WHERE person_id = (SELECT id FROM people WHERE first_name = 'Sam')`); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Claim(ctx, d, s, "2026-09-27", person("Lee", "2165550111"), []Pick{{OccurrenceID: occ(s, 0)}})
+	var full *FullError
+	if !errors.As(err, &full) {
+		t.Fatalf("Lee: err = %v, want FullError while Jenny waits", err)
+	}
+}
+
+func TestClaimLeavesTheCallersPicksAlone(t *testing.T) {
+	d := testDB(t)
+	s, _ := openSheet(t, d, "2099-10-30", 3)
+	picks := []Pick{{OccurrenceID: occ(s, 0), Comment: "  glue  "}}
+	if _, _, err := Claim(context.Background(), d, s, "2026-09-27", jenny, picks); err != nil {
+		t.Fatal(err)
+	}
+	if picks[0].Comment != "  glue  " {
+		t.Fatalf("caller's comment became %q", picks[0].Comment)
+	}
+}

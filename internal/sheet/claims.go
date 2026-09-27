@@ -65,6 +65,7 @@ func Claim(ctx context.Context, d *sql.DB, s Sheet, today string, p Person, pick
 	if len(picks) == 0 {
 		return "", nil, Invalid{"picks": "Choose at least one slot."}
 	}
+	picks = append([]Pick(nil), picks...) // trimmed below; the caller's slice is left alone
 	for i := range picks {
 		picks[i].Comment = strings.TrimSpace(picks[i].Comment)
 		if utf8.RuneCountInString(picks[i].Comment) > maxComment {
@@ -97,13 +98,14 @@ func Claim(ctx context.Context, d *sql.DB, s Sheet, today string, p Person, pick
 		seen[pk.OccurrenceID] = true
 		var date sql.NullString
 		var wanted sql.NullInt64
-		var taken int
+		var taken, waiting int
 		err := tx.QueryRowContext(ctx, `SELECT o.date, sl.quantity_wanted,
-			(SELECT coalesce(sum(c.quantity), 0) FROM claims c WHERE c.occurrence_id = o.id AND c.status = 'confirmed')
+			(SELECT coalesce(sum(c.quantity), 0) FROM claims c WHERE c.occurrence_id = o.id AND c.status = 'confirmed'),
+			(SELECT count(*) FROM claims c WHERE c.occurrence_id = o.id AND c.status = 'waitlisted')
 			FROM occurrences o
 			JOIN slots sl ON sl.id = o.slot_id
 			JOIN sections se ON se.id = sl.section_id
-			WHERE o.id = ? AND se.sheet_id = ?`, pk.OccurrenceID, s.ID).Scan(&date, &wanted, &taken)
+			WHERE o.id = ? AND se.sheet_id = ?`, pk.OccurrenceID, s.ID).Scan(&date, &wanted, &taken, &waiting)
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil, ErrNotFound
 		}
@@ -124,7 +126,9 @@ func Claim(ctx context.Context, d *sql.DB, s Sheet, today string, p Person, pick
 			return "", nil, Invalid{"picks": "You are already signed up for one of those. Your confirmation has the link to manage it."}
 		}
 		o := Outcome{OccurrenceID: pk.OccurrenceID, Status: Confirmed}
-		if wanted.Valid && taken+1 > int(wanted.Int64) {
+		// Full, or people are already waiting: a newcomer never jumps the queue. (A place
+		// that frees up goes to the first person waiting, not to whoever claims next.)
+		if wanted.Valid && (taken+1 > int(wanted.Int64) || waiting > 0) {
 			if !pk.Waitlist || !allowWaitlist {
 				full = append(full, pk.OccurrenceID)
 				continue

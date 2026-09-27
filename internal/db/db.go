@@ -18,9 +18,10 @@ var migrationFS embed.FS
 
 // Open opens (creating if needed) the database at path with the pragmas this
 // application relies on: WAL for concurrent readers, foreign keys enforced,
-// a busy timeout so writers queue instead of failing.
+// a busy timeout so writers queue instead of failing, and transactions that take
+// the write lock when they begin, so a read-then-write never fails to upgrade.
 func Open(path string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_txlock=immediate", path)
 	d, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err

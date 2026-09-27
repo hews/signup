@@ -1,0 +1,115 @@
+{{define "title"}}{{.Sheet.Title}} · signup{{end}}
+{{define "content"}}
+{{$s := .Sheet}}{{$base := .AdminPath}}
+<main class="page page-wide">
+  <header>
+    <div class="hstack">
+      {{if eq $s.Status "draft"}}<span class="pill pill-locked">Draft</span>{{else if eq $s.Status "open"}}<span class="pill pill-open">Open</span>{{else}}<span class="pill pill-closed">Closed</span>{{end}}
+      <span class="meta">{{if eq $s.Format "by_date"}}Dates and times{{else}}Just a list{{end}} · {{$s.TimeZone}}</span>
+    </div>
+    <h1>{{$s.Title}}</h1>
+    {{with $s.OrganizerName}}<p class="muted">by {{.}}</p>{{end}}
+  </header>
+
+  <div class="notice notice-key" role="note">
+    <b>This page's address is your key.</b> Bookmark it now: it is the only way back to this sheet, and anyone with it can change the sheet. It is not the link you share.
+  </div>
+
+  {{with .Errors.publish}}<p class="notice notice-error" role="alert">{{.}}</p>{{end}}
+  {{with .Errors.remove}}<p class="notice notice-error" role="alert">{{.}}</p>{{end}}
+
+  {{if ne $s.Status "draft"}}
+  <section class="card stack" aria-labelledby="share">
+    <h2 id="share">Share this link</h2>
+    <p class="muted">Anyone with it can see the sheet and sign up. Text it, email it, or print it.</p>
+    <div class="link-box"><input class="input" readonly value="{{.ShareURL}}" aria-label="Link to share"></div>
+    <a class="btn btn-secondary" href="{{.SharePath}}">Open the sheet</a>
+  </section>
+  {{end}}
+
+  <div class="builder">
+    {{range $s.Sections}}{{$sec := .}}
+    <section aria-label="{{if .Date}}{{fmtDate .Date}}{{else}}{{.Title}}{{end}}">
+      <div class="group-head">
+        {{if .Date}}<span class="day">{{fmtDay .Date}}</span><span class="date">{{fmtDate .Date}}</span>{{else}}<span class="day">{{.Title}}</span>{{end}}
+        <a class="btn btn-ghost btn-sm right" href="{{$base}}/sections/{{.ID}}/remove">Remove…</a>
+      </div>
+      {{range .Slots}}
+      <div class="slot">
+        <div class="info">
+          <div class="name">{{.Title}}</div>
+          <div class="time">{{fmtSlotTime .Start .End}}{{if and .Start (gt .Quantity 0)}} · {{end}}{{if gt .Quantity 0}}{{.Quantity}} wanted{{else}}No limit{{end}}</div>
+          {{with .Description}}<div class="meta">{{.}}</div>{{end}}
+        </div>
+        <form class="action" method="post" action="{{$base}}/slots/{{.ID}}/remove">
+          <button class="btn btn-outline btn-sm" type="submit" aria-label="Remove {{.Title}}">Remove</button>
+        </form>
+      </div>
+      {{end}}
+      <details{{if eq $.OpenSection .ID}} open{{end}}>
+        <summary>+ Add a slot{{if .Date}} on {{fmtDate .Date}}{{end}}</summary>
+        <form class="stack" method="post" action="{{$base}}/sections/{{.ID}}/slots">
+          {{$mine := eq $.OpenSection .ID}}
+          <div class="field{{if and $mine $.Errors.slot_title}} has-error{{end}}">
+            <label for="slot-title-{{.ID}}">Slot</label>
+            <input class="input" id="slot-title-{{.ID}}" name="slot_title" maxlength="120" placeholder="Crafts table" {{if $mine}}value="{{$.Form.Get "slot_title"}}"{{end}}>
+            {{if $mine}}{{template "field-error" $.Errors.slot_title}}{{end}}
+          </div>
+          <div class="{{if $sec.Date}}row3{{else}}row2{{end}}">
+            <div class="field{{if and $mine $.Errors.quantity}} has-error{{end}}">
+              <label for="qty-{{.ID}}">How many</label>
+              <input class="input" id="qty-{{.ID}}" name="quantity" inputmode="numeric" pattern="[0-9]*" placeholder="No limit" {{if $mine}}value="{{$.Form.Get "quantity"}}"{{end}}>
+              {{if $mine}}{{template "field-error" $.Errors.quantity}}{{end}}
+            </div>
+            {{if $sec.Date}}
+            <div class="field{{if and $mine $.Errors.start}} has-error{{end}}">
+              <label for="start-{{.ID}}">From</label>
+              <input class="input" type="time" id="start-{{.ID}}" name="start" {{if $mine}}value="{{$.Form.Get "start"}}"{{end}}>
+              {{if $mine}}{{template "field-error" $.Errors.start}}{{end}}
+            </div>
+            <div class="field{{if and $mine $.Errors.end}} has-error{{end}}">
+              <label for="end-{{.ID}}">To</label>
+              <input class="input" type="time" id="end-{{.ID}}" name="end" {{if $mine}}value="{{$.Form.Get "end"}}"{{end}}>
+              {{if $mine}}{{template "field-error" $.Errors.end}}{{end}}
+            </div>
+            {{end}}
+          </div>
+          <div class="field">
+            <label for="desc-{{.ID}}">Details <span class="meta">(optional)</span></label>
+            <input class="input" id="desc-{{.ID}}" name="slot_description" maxlength="2000" {{if $mine}}value="{{$.Form.Get "slot_description"}}"{{end}}>
+          </div>
+          <button class="btn btn-secondary" type="submit">Add slot</button>
+        </form>
+      </details>
+    </section>
+    {{end}}
+
+    <section class="card">
+      <form class="stack" method="post" action="{{$base}}/sections">
+        {{if eq $s.Format "by_date"}}
+        <div class="field{{if .Errors.date}} has-error{{end}}">
+          <label for="date">{{if $s.Sections}}Add another date{{else}}Add a date{{end}}</label>
+          <input class="input" type="date" id="date" name="date" value="{{.Form.Get "date"}}" required>
+          {{template "field-error" .Errors.date}}
+        </div>
+        <button class="btn btn-secondary" type="submit">Add date</button>
+        {{else}}
+        <div class="field{{if .Errors.title}} has-error{{end}}">
+          <label for="heading">{{if $s.Sections}}Add another heading{{else}}Add a heading{{end}}</label>
+          <input class="input" id="heading" name="title" value="{{.Form.Get "title"}}" maxlength="120" placeholder="Things to bring" required>
+          {{template "field-error" .Errors.title}}
+        </div>
+        <button class="btn btn-secondary" type="submit">Add heading</button>
+        {{end}}
+      </form>
+    </section>
+  </div>
+
+  {{if eq $s.Status "draft"}}
+  <form method="post" action="{{$base}}/publish" class="stack">
+    <button class="btn btn-primary btn-block" type="submit"{{if eq $s.Slots 0}} disabled{{end}}>Publish and get the link</button>
+    <p class="meta center">{{if eq $s.Slots 0}}Add at least one slot first.{{else}}{{$s.Slots}} slot{{if ne $s.Slots 1}}s{{end}} ready. You can keep editing after publishing.{{end}}</p>
+  </form>
+  {{end}}
+</main>
+{{end}}

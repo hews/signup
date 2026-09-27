@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // sheets name IANA zones; the binary carries its own zone data
 
 	"github.com/hews/signup/internal/config"
 	"github.com/hews/signup/internal/db"
@@ -56,7 +57,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           web.Handler(database, logger),
+		Handler:           web.Handler(database, logger, cfg.BaseURL),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

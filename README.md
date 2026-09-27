@@ -23,7 +23,7 @@ make build        # static binary at ./signup
 ## Deploy
 
 The application is one static binary and one SQLite file. Run it behind any reverse proxy
-that terminates TLS and forwards to the address it listens on. It reads three environment
+that terminates TLS and forwards to the address it listens on. It reads these environment
 variables:
 
 | Variable | Default | Meaning |
@@ -31,6 +31,7 @@ variables:
 | `SIGNUP_LISTEN` | `127.0.0.1:8080` | Address to listen on |
 | `SIGNUP_DB` | `signup.db` | Path to the SQLite database file |
 | `SIGNUP_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
+| `SIGNUP_BASE_URL` | derived from each request | Scheme and host for links people copy, e.g. `https://sheets.example.org`. Set it in production; the fallback trusts the `Host` and `X-Forwarded-Proto` headers your proxy passes |
 
 Back up the database file continuously (Litestream works well) or copy it; there is nothing
 else to keep. Proxy configuration, service units and hosting details are deliberately not in

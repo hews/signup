@@ -91,8 +91,8 @@ func TestSheetsMigrationApplies(t *testing.T) {
 	if err := d.QueryRow(`SELECT value FROM meta WHERE key = 'schema'`).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	if v != "2" {
-		t.Fatalf("meta schema = %q, want 2", v)
+	if v != "3" {
+		t.Fatalf("meta schema = %q, want 3", v)
 	}
 	seedSheet(t, d)
 }

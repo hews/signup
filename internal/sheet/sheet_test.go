@@ -279,6 +279,10 @@ func TestPublishNeedsASlot(t *testing.T) {
 	if err := Publish(ctx, d, s); err != nil {
 		t.Fatal(err)
 	}
+	// A double tap: the second request still holds the draft it loaded.
+	if err := Publish(ctx, d, s); err != nil {
+		t.Errorf("second publish from the same draft copy: %v, want nil", err)
+	}
 	if got := reload(t, d, token).Status; got != Open {
 		t.Fatalf("status = %q, want open", got)
 	}

@@ -372,12 +372,21 @@ func Publish(ctx context.Context, d *sql.DB, s Sheet) error {
 	if err != nil {
 		return err
 	}
-	if n, err := res.RowsAffected(); err != nil {
+	if n, err := res.RowsAffected(); err != nil || n == 1 {
 		return err
-	} else if n == 0 {
-		return Invalid{"publish": "Add at least one slot first."}
 	}
-	return nil
+	// Nothing changed: say why from the sheet as it is now (a double tap finds it open).
+	var status string
+	if err := d.QueryRowContext(ctx, `SELECT status FROM sheets WHERE id = ?`, s.ID).Scan(&status); err != nil {
+		return err
+	}
+	switch status {
+	case Open:
+		return nil
+	case Closed:
+		return Invalid{"publish": "This sheet is closed."}
+	}
+	return Invalid{"publish": "Add at least one slot first."}
 }
 
 func (s Sheet) section(id int64) (Section, bool) {

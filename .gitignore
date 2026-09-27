@@ -9,3 +9,6 @@
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Personal, machine-local agent notes; never committed.
+CLAUDE.local.md

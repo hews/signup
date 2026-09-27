@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,9 @@ func newServer(t *testing.T) (*httptest.Server, *bytes.Buffer) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { d.Close() })
+	if err := db.Migrate(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
 	var logs bytes.Buffer
 	srv := httptest.NewServer(Handler(d, logx.New(&logs, slog.LevelDebug)))
 	t.Cleanup(srv.Close)

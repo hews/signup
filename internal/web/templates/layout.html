@@ -1,0 +1,17 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="same-origin">
+<title>{{block "title" .}}signup{{end}}</title>
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+{{block "content" .}}{{end}}
+</body>
+</html>{{end}}
+
+{{define "field-error"}}{{with .}}<p class="error" role="alert">{{.}}</p>{{end}}{{end}}

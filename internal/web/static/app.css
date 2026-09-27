@@ -1,0 +1,32 @@
+/* Page layout for the application's own pages. Components and tokens come from tokens.css;
+   this file only places them. Phone first (393 px); widths cap at the reading column. */
+
+.page { max-width: var(--w-form); margin: 0 auto; padding: var(--s-4) var(--gutter) var(--s-16); display: grid; gap: var(--s-6); }
+.page-wide { max-width: var(--w-read); }
+.page > header { display: grid; gap: var(--s-2); }
+.page h1 { font: var(--t-display); letter-spacing: -0.015em; }
+
+form.stack, .card.stack { gap: var(--s-4); }
+.radio { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-3); border: 1px solid var(--c-line-2); border-radius: var(--r-md); background: var(--c-surface); cursor: pointer; }
+.radio:has(input:checked) { border-color: var(--c-accent); background: var(--c-accent-soft); }
+.radio input { margin-top: 3px; }
+.radio b { display: block; font: var(--t-label); }
+.select { appearance: auto; }
+
+.notice { padding: var(--s-3) var(--s-4); border-radius: var(--r-md); font: var(--t-body-sm); }
+.notice-key { background: var(--c-wait-soft); color: var(--c-ink); border: 1px solid var(--c-wait); }
+.notice-ok { background: var(--c-ok-soft); color: var(--c-ink); }
+.notice-error { background: var(--c-danger-soft); color: var(--c-danger); }
+
+.link-box { display: flex; gap: var(--s-2); align-items: center; }
+.link-box .input { font: var(--t-body-sm); font-family: var(--t-family-mono); }
+
+.builder { display: grid; gap: var(--s-4); }
+.builder section { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-lg); overflow: hidden; }
+.builder .group-head { position: static; background: var(--c-surface-2); }
+.builder .slot:first-of-type { border-top: 0; }
+.builder details { padding: var(--s-3) var(--gutter); border-top: 1px solid var(--c-line); }
+.builder summary { cursor: pointer; font: var(--t-label); color: var(--c-accent-text); min-height: var(--tap); display: flex; align-items: center; }
+.builder details form { padding-top: var(--s-2); }
+.inline { display: inline; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s-3); }

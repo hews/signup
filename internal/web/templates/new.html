@@ -1,0 +1,47 @@
+{{define "title"}}New sheet · signup{{end}}
+{{define "content"}}
+<main class="page">
+  <header>
+    <p class="micro">New sheet</p>
+    <h1>What is it for?</h1>
+  </header>
+  <form class="stack" method="post" action="/new">
+    <div class="field{{if .Errors.title}} has-error{{end}}">
+      <label for="title">Title</label>
+      <input class="input" id="title" name="title" value="{{.Form.Get "title"}}" maxlength="120" required placeholder="Class party helpers">
+      {{template "field-error" .Errors.title}}
+    </div>
+    <div class="field{{if .Errors.organizer_name}} has-error{{end}}">
+      <label for="organizer_name">Your name, as people will see it</label>
+      <input class="input" id="organizer_name" name="organizer_name" value="{{.Form.Get "organizer_name"}}" maxlength="120" placeholder="Ms. Alvarez">
+      {{template "field-error" .Errors.organizer_name}}
+    </div>
+    <div class="field{{if .Errors.description}} has-error{{end}}">
+      <label for="description">Description <span class="meta">(optional)</span></label>
+      <textarea class="textarea" id="description" name="description" maxlength="2000">{{.Form.Get "description"}}</textarea>
+      {{template "field-error" .Errors.description}}
+    </div>
+    <div class="field{{if .Errors.location}} has-error{{end}}">
+      <label for="location">Where <span class="meta">(optional)</span></label>
+      <input class="input" id="location" name="location" value="{{.Form.Get "location"}}" maxlength="120" placeholder="Room 12">
+      {{template "field-error" .Errors.location}}
+    </div>
+    <div class="field{{if .Errors.time_zone}} has-error{{end}}">
+      <label for="time_zone">Time zone</label>
+      <select class="select input" id="time_zone" name="time_zone">
+        {{$tz := .Form.Get "time_zone"}}{{range .TimeZones}}<option value="{{.}}"{{if eq . $tz}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      {{template "field-error" .Errors.time_zone}}
+    </div>
+    <fieldset class="field{{if .Errors.format}} has-error{{end}}">
+      <legend class="sr-only">Layout</legend>
+      <label class="radio"><input type="radio" name="format" value="by_date"{{if ne (.Form.Get "format") "slots_only"}} checked{{end}}>
+        <span><b>Dates and times</b><span class="meta">Shifts or slots on one or more days.</span></span></label>
+      <label class="radio"><input type="radio" name="format" value="slots_only"{{if eq (.Form.Get "format") "slots_only"}} checked{{end}}>
+        <span><b>Just a list</b><span class="meta">Jobs or things to bring, no dates.</span></span></label>
+      {{template "field-error" .Errors.format}}
+    </fieldset>
+    <button class="btn btn-primary btn-block" type="submit">Next: add slots</button>
+  </form>
+</main>
+{{end}}

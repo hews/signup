@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // sheets name IANA zones; the binary carries its own zone data
 
 	"github.com/hews/signup/internal/config"
 	"github.com/hews/signup/internal/db"

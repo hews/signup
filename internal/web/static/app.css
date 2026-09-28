@@ -7,11 +7,23 @@
 .page h1 { font: var(--t-display); letter-spacing: -0.015em; }
 
 form.stack, .card.stack { gap: var(--s-4); }
+fieldset.field { border: 0; padding: 0; margin: 0; min-width: 0; }
 .radio { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-3); border: 1px solid var(--c-line-2); border-radius: var(--r-md); background: var(--c-surface); cursor: pointer; }
 .radio:has(input:checked) { border-color: var(--c-accent); background: var(--c-accent-soft); }
 .radio input { margin-top: 3px; }
 .radio b { display: block; font: var(--t-label); }
-.select { appearance: auto; }
+.select {
+  /* Our own chevron, drawn with two gradients in the theme's ink so it follows light and
+     dark mode, with room on the right instead of the native arrow against the border. */
+  appearance: none; -webkit-appearance: none;
+  padding-right: calc(var(--s-3) + 28px);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--c-ink-2) 50%),
+    linear-gradient(135deg, var(--c-ink-2) 50%, transparent 50%);
+  background-position: calc(100% - 22px) 55%, calc(100% - 16px) 55%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
 
 .notice { padding: var(--s-3) var(--s-4); border-radius: var(--r-md); font: var(--t-body-sm); }
 .notice-key { background: var(--c-wait-soft); color: var(--c-ink); border: 1px solid var(--c-wait); }
@@ -68,3 +80,4 @@ form.stack, .card.stack { gap: var(--s-4); }
 .picks .who.field { grid-column: 1 / -1; grid-row: auto; }
 .picks .waitlist { grid-column: 1 / -1; grid-row: auto; display: flex; gap: var(--s-2); align-items: flex-start; padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--c-wait-soft); color: var(--c-ink); cursor: pointer; }
 .picks .waitlist input { margin-top: 3px; }
+@media (forced-colors: active) { .select { appearance: auto; -webkit-appearance: auto; background-image: none; padding-right: var(--s-3); } }

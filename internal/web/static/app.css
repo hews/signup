@@ -80,3 +80,4 @@ fieldset.field { border: 0; padding: 0; margin: 0; min-width: 0; }
 .picks .who.field { grid-column: 1 / -1; grid-row: auto; }
 .picks .waitlist { grid-column: 1 / -1; grid-row: auto; display: flex; gap: var(--s-2); align-items: flex-start; padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--c-wait-soft); color: var(--c-ink); cursor: pointer; }
 .picks .waitlist input { margin-top: 3px; }
+@media (forced-colors: active) { .select { appearance: auto; -webkit-appearance: auto; background-image: none; padding-right: var(--s-3); } }

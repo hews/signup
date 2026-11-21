@@ -6,4 +6,5 @@ issue. You will get a reply within a few days.
 
 What the code promises is written in AGENTS.md: personal data stays out of logs, there are no
 secrets in the repository, no third-party code runs on any page, and every organisation's data
-is isolated. Dependabot, CodeQL and govulncheck run on every change.
+is isolated. Dependabot, CodeQL and govulncheck run on every change, and govulncheck runs on `main`
+every day, so an advisory published against unchanged code is found the next morning.

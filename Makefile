@@ -13,7 +13,10 @@ test: ## Format check, vet, tests
 	go vet ./...
 	go test -race -count=1 ./...
 
+vulncheck: ## govulncheck against today's advisories, as the daily scan (vulnerabilities.yml) runs it
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
 build: ## Static binary at ./signup
 	CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o signup ./cmd/signup
 
-.PHONY: help run test build
+.PHONY: help run test vulncheck build

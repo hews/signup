@@ -61,7 +61,8 @@ direction, reviews, and approves. Everything about that process is visible here:
   writer).
 - `.beads/` is the task tracker (`bd list` shows the work).
 - Every pull request is reviewed by Claude in CI before a person looks at it, and CI also
-  runs the tests, CodeQL, govulncheck and Dependabot.
+  runs the tests, CodeQL, govulncheck and Dependabot. A daily scan of `main`
+  (`make vulncheck`) opens an issue when a new advisory lands on code that has not changed.
 
 If you want to see how the sausage is made, the pull requests are the record.
 

@@ -23,7 +23,9 @@ Invariants. Every change keeps all of these true; the tests that check them stay
 - **Nothing here is for crawlers.** Every response carries `X-Robots-Tag: noindex` and
   `/robots.txt` disallows everything. Do not weaken either to make something easier to test.
 
-Day to day: `make test` before every push; CI runs the same. `make run` starts a local
+Day to day: `make test` while working; every push goes through the local review gate
+(`review-gate prime` prints its rules; `review-gate run`, then `review-gate push`), whose
+check is `make check`. CI runs the tests too. `make run` starts a local
 server on 127.0.0.1:8080 with `./signup.db`.
 
 How work happens here: the agent does the work in the open. It claims a bead, changes code

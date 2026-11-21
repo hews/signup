@@ -1,0 +1,70 @@
+# The daily scan of main against the newest advisories. govulncheck reads
+# vuln.go.dev on every run, the Go toolchain and the standard library included,
+# which Dependabot's alerts do not cover, so a vulnerability published against code
+# that has not changed is found the next morning, not at the next PR. On a finding
+# the job fails and opens an issue, or updates the open one, so the fix is the next
+# PR, ahead of other work.
+name: vulnerabilities
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Scan (govulncheck)
+        id: scan
+        shell: bash # with pipefail, so the scan's exit is the step's, not tee's
+        run: make vulncheck 2>&1 | tee scan.txt
+      - name: Open or update the issue
+        # A manual run from another branch fails and its log says why; only main's
+        # finding is filed.
+        if: failure() && steps.scan.outcome == 'failure' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # A scan that failed for another reason (the network, a tool that did not
+          # build) fails the run, and the run's log says why; it is not a finding.
+          if ! grep -q '^Vulnerability #' scan.txt; then
+            echo "the scan failed without reporting a vulnerability; see the step above"
+            exit 0
+          fi
+          title="vulnerability: the daily scan of main found one"
+          # The advisories' ids, sorted, are what a later scan compares: the rest of the
+          # log (the go command's downloads, timings) changes from run to run.
+          ids=$(grep -oE 'GO-[0-9]{4}-[0-9]+|GHSA(-[a-z0-9]{4}){3}' scan.txt | sort -u | paste -sd' ' -)
+          {
+            echo "The daily scan found a vulnerability on main ($RUN). The fix goes ahead of other work: bump what fixes it, in a PR of its own."
+            echo
+            echo "Advisories: $ids"
+            echo
+            echo '```'
+            tail -c 60000 scan.txt
+            echo '```'
+          } > body.md
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then
+            # The same advisories again say nothing new; changed ones rewrite the body
+            # and get a comment, which notifies as the edit does not. A body edited by
+            # hand, without the line, reads as changed and is written again.
+            old=$(gh issue view "$n" -R "$GITHUB_REPOSITORY" --json body --jq .body | tr -d '\r' | grep -m1 '^Advisories: ' || true)
+            if [ "$old" != "Advisories: $ids" ]; then
+              gh issue edit "$n" -R "$GITHUB_REPOSITORY" --body-file body.md
+              gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "The findings changed ($RUN); the body above is the latest scan."
+            fi
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
+          fi

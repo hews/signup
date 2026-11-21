@@ -16,7 +16,9 @@ test: ## Format check, vet, tests
 vulncheck: ## govulncheck against today's advisories, as the daily scan (vulnerabilities.yml) runs it
 	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
+check: test vulncheck ## Everything the review gate checks: tests, then govulncheck
+
 build: ## Static binary at ./signup
 	CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o signup ./cmd/signup
 
-.PHONY: help run test vulncheck build
+.PHONY: help run test vulncheck check build

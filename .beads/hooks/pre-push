@@ -1,4 +1,20 @@
 #!/usr/bin/env sh
+# --- BEGIN REVIEW-GATE ---
+# Managed by review-gate init. Every pushed branch must have run clean through the local
+# review (review-gate status); REVIEW_GATE=skip:<reason> records a bypass, never a pass.
+if command -v review-gate >/dev/null 2>&1; then
+  _rg_refs=$(mktemp) || exit 1
+  trap 'rm -f "$_rg_refs"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  cat >"$_rg_refs"
+  review-gate verify "$@" <"$_rg_refs" || exit 1
+  exec <"$_rg_refs"
+else
+  echo >&2 "review-gate is not installed (https://github.com/hews/review-gate#install); refusing to push"
+  exit 1
+fi
+# --- END REVIEW-GATE ---
 # --- BEGIN BEADS INTEGRATION v1.3.0 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then

@@ -12,7 +12,7 @@ current milestone.
 
 ## Run it locally
 
-Requires Go 1.26.
+Requires Go 1.27.4 or later.
 
 ```sh
 make run          # http://127.0.0.1:8080 with ./signup.db

@@ -10,9 +10,13 @@ permissions:
   pull-requests: write
   issues: write
   id-token: write
+# A Dependabot pull request gets no cloud review: its runs read Dependabot's own secret
+# store, which does not hold the token, and the action refuses bot actors. The local
+# review gate (review-gate pr <number>) reviews those. The job is not named "review",
+# which is the status the gate posts.
 jobs:
-  review:
-    if: ${{ !github.event.pull_request.draft }}
+  claude-review:
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
